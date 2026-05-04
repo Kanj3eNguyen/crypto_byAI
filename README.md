@@ -135,60 +135,160 @@ pip install -r requirements.txt --ignore-installed xgboost
 
 Chỉnh sửa `configs/default.yaml` nếu cần thiết.
 
-## 📊 Workflow Chính
+## Workflow hien tai nen dung
 
-### 1. Chuẩn bị Dataset
+Nen chay thanh 2 pipeline rieng:
 
-```bash
-# Chia file gốc thành train/val/test
-python -m src.dataset.split_original_files \
-    --input data/raw/original \
-    --train-ratio 0.7 \
-    --val-ratio 0.15 \
-    --test-ratio 0.15
+- `crypto_family`: train tu du lieu synthetic sinh tu `data/raw/original`
+- `ransomware_family`: train tu du lieu ransomware family that trong `data/ransomware_family/<FAMILY>/`
+
+Khong nen gop 2 dataset nay vao cung mot model vi `crypto_family` va `ransomware_family` la 2 cap nhan khac nhau.
+
+### 1. Smoke test nhanh
+
+```powershell
+python -m src.cli generate-samples `
+  --input data/raw/original `
+  --output data/generated `
+  --metadata data/metadata/dataset.csv `
+  --limit 500 `
+  --skip-hybrid
 ```
 
-### 2. Sinh Dữ Liệu Mã Hoá
-
-```bash
-# Sinh các mẫu mã hoá từ file gốc
-python -m src.dataset.generate_encrypted_samples \
-    --input data/raw/original \
-    --output data/generated \
-    --samples-per-file 3
+```powershell
+python -m src.cli build-ransomware-metadata `
+  --input data/ransomware_family `
+  --output data/metadata/ransomware_family_dataset.csv `
+  --limit-per-family 100
 ```
 
-### 3. Trích Xuất Đặc Trưng
+### 2. Train model crypto_family
 
-```bash
-# Trích xuất tất cả các đặc trưng
-python -m src.cli extract-features \
-    --input data/generated \
-    --output data/features/features.parquet \
-    --metadata data/metadata/dataset.csv
+`crypto_family` gop cac nhan chi tiet nhu sau:
+
+```text
+block_cipher_like  = AES_like + 3DES_like
+stream_cipher_like = ChaCha20_Salsa20_like + RC4_like
+compressed_only    = compressed_only
+not_encrypted      = not_encrypted
+unknown_encrypted  = unknown_encrypted
 ```
 
-### 4. Huấn Luyện Model
+Sinh du lieu synthetic tu raw:
 
-```bash
-# Train Random Forest classifier
-python -m src.cli train \
-    --features data/features/features.parquet \
-    --model-output models/crypto_predictor.pkl \
-    --report-dir reports
+```powershell
+python -m src.cli generate-samples `
+  --input data/raw/original `
+  --output data/generated `
+  --metadata data/metadata/dataset.csv `
+  --limit 1000 `
+  --skip-hybrid
 ```
 
-### 5. Đánh Giá Model
+Trich xuat feature:
 
-```bash
-# Tính metrics và tạo báo cáo
-python -m src.cli evaluate \
-    --model models/crypto_predictor.pkl \
-    --features data/features/features_test.parquet \
-    --report-dir reports
+```powershell
+python -m src.cli extract-features `
+  --input data/generated `
+  --output data/features/features.parquet `
+  --metadata data/metadata/dataset.csv
 ```
 
-### 6. Dự Đoán File
+Train va sinh report:
+
+```powershell
+python -m src.cli train `
+  --features data/features/features.parquet `
+  --metadata data/metadata/dataset.csv `
+  --label-column crypto_family `
+  --model-output models/crypto_family_predictor.pkl `
+  --report-dir reports/crypto_family
+```
+
+Report sinh ra:
+
+```text
+reports/crypto_family/metrics.json
+reports/crypto_family/classification_report.txt
+reports/crypto_family/confusion_matrix.png
+reports/crypto_family/top_features.json
+```
+
+### 3. Train model ransomware_family
+
+Chuan bi du lieu theo cau truc:
+
+```text
+data/ransomware_family/
+  WANNACRY/
+  LOCKBIT/
+  CONTI/
+  BLACKCAT/
+  CERBER/
+  GANDCRAB/
+  RYUK/
+  SODINOKIBI/
+  PHOBOS/
+  NOTPETYA/
+```
+
+Tao metadata family:
+
+```powershell
+python -m src.cli build-ransomware-metadata `
+  --input data/ransomware_family `
+  --output data/metadata/ransomware_family_dataset.csv `
+  --limit-per-family 500
+```
+
+Trich xuat feature:
+
+```powershell
+python -m src.cli extract-features `
+  --input data/ransomware_family `
+  --output data/features/ransomware_family_features.parquet `
+  --metadata data/metadata/ransomware_family_dataset.csv
+```
+
+Train va sinh report:
+
+```powershell
+python -m src.cli train `
+  --features data/features/ransomware_family_features.parquet `
+  --metadata data/metadata/ransomware_family_dataset.csv `
+  --label-column ransomware_family `
+  --model-output models/ransomware_family_predictor.pkl `
+  --report-dir reports/ransomware_family
+```
+
+Report sinh ra:
+
+```text
+reports/ransomware_family/metrics.json
+reports/ransomware_family/classification_report.txt
+reports/ransomware_family/confusion_matrix.png
+reports/ransomware_family/top_features.json
+```
+
+### 4. Quy mo data khuyen nghi
+
+```text
+Smoke test:
+  raw synthetic:        200-500 raw files
+  ransomware_family:    50-100 files/family
+
+Baseline:
+  raw synthetic:        1000 raw files
+  ransomware_family:    500 files/family
+
+Train nghiem tuc:
+  raw synthetic:        toan bo data/raw/original
+  ransomware_family:    1000+ files/family
+```
+
+Khi da chay on, bo `--limit` o `generate-samples` va tang `--limit-per-family` len `1000` hoac cao hon.
+
+### 5. Du Doan File
 
 ```bash
 # Dự đoán thuật toán mã hoá cho một file
