@@ -5,6 +5,7 @@ Command-line interface for ransomware crypto prediction
 import click
 import os
 import json
+import random
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -14,6 +15,40 @@ from src.features.extract_features import extract_features_from_file, extract_fe
 from src.models.train import ModelTrainer
 from src.models.evaluate import ModelEvaluator
 from src.models.predict import Predictor, format_prediction_json
+
+
+CRYPTO_FAMILY_MAP = {
+    'AES_like': 'block_cipher_like',
+    '3DES_like': 'block_cipher_like',
+    'ChaCha20_Salsa20_like': 'stream_cipher_like',
+    'RC4_like': 'stream_cipher_like',
+    'compressed_only': 'compressed_only',
+    'not_encrypted': 'not_encrypted',
+    'unknown_encrypted': 'unknown_encrypted',
+}
+
+
+def add_crypto_family_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Add broad crypto family labels derived from label_group."""
+    if 'label_group' in df.columns and 'crypto_family' not in df.columns:
+        df['crypto_family'] = df['label_group'].map(CRYPTO_FAMILY_MAP)
+    return df
+
+
+def normalize_path_key(path_value) -> str:
+    """Normalize path strings for stable metadata joins across slash styles."""
+    return str(path_value).replace('\\', '/').rstrip('/').lower()
+
+
+def assign_split(index: int, total: int, train_ratio: float, val_ratio: float) -> str:
+    """Assign deterministic train/val/test split by item position."""
+    train_cutoff = int(total * train_ratio)
+    val_cutoff = train_cutoff + int(total * val_ratio)
+    if index < train_cutoff:
+        return 'train'
+    if index < val_cutoff:
+        return 'val'
+    return 'test'
 
 
 @click.group()
@@ -127,6 +162,78 @@ def generate_samples(input, output, metadata, limit, include_hybrid):
 
 
 @cli.command()
+@click.option('--input', '-i', default='data/ransomware_family', help='Directory with one subdirectory per ransomware family')
+@click.option('--output', '-o', default='data/metadata/ransomware_family_dataset.csv', help='Metadata CSV output path')
+@click.option('--limit-per-family', type=int, help='Maximum files to use from each family directory')
+@click.option('--train-ratio', default=0.7, show_default=True, help='Train split ratio per family')
+@click.option('--val-ratio', default=0.15, show_default=True, help='Validation split ratio per family')
+@click.option('--test-ratio', default=0.15, show_default=True, help='Test split ratio per family')
+@click.option('--random-state', default=42, show_default=True, help='Random seed for per-family shuffling')
+def build_ransomware_metadata(
+    input,
+    output,
+    limit_per_family,
+    train_ratio,
+    val_ratio,
+    test_ratio,
+    random_state,
+):
+    """Build metadata for real ransomware-family encrypted datasets."""
+    input_path = Path(input)
+    if not input_path.exists():
+        raise click.ClickException(f"Input directory not found: {input}")
+
+    ratio_sum = train_ratio + val_ratio + test_ratio
+    if abs(ratio_sum - 1.0) > 0.001:
+        raise click.ClickException(f"Split ratios must sum to 1.0, got {ratio_sum}")
+
+    rows = []
+    rng = random.Random(random_state)
+
+    family_dirs = sorted(
+        path for path in input_path.iterdir()
+        if path.is_dir() and not path.name.startswith('.')
+    )
+    if not family_dirs:
+        raise click.ClickException(f"No family directories found in: {input}")
+
+    for family_dir in family_dirs:
+        files = sorted(
+            path for path in family_dir.rglob('*')
+            if path.is_file()
+            and not path.name.startswith('.')
+            and not any(part.startswith('.') for part in path.relative_to(family_dir).parts)
+        )
+        rng.shuffle(files)
+        if limit_per_family:
+            files = files[:limit_per_family]
+
+        for index, file_path in enumerate(files):
+            rows.append({
+                'path': str(file_path),
+                'ransomware_family': family_dir.name.upper(),
+                'label_group': 'unknown_encrypted',
+                'crypto_family': 'unknown_encrypted',
+                'split': assign_split(index, len(files), train_ratio, val_ratio),
+                'file_size': file_path.stat().st_size,
+            })
+
+    if not rows:
+        raise click.ClickException(f"No files found under family directories in: {input}")
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(rows)
+    df.to_csv(output_path, index=False)
+
+    click.echo(f"Metadata saved to: {output}")
+    click.echo(f"Families: {df['ransomware_family'].nunique()}")
+    click.echo(f"Files: {len(df)}")
+    click.echo("Split counts:")
+    click.echo(df['split'].value_counts().to_string())
+
+
+@cli.command()
 @click.option('--input', '-i', required=True, help='Input file or directory')
 @click.option('--output', '-o', default='data/features/features.parquet', help='Output parquet file')
 @click.option('--metadata', '-m', help='Metadata CSV file with labels')
@@ -159,10 +266,21 @@ def extract_features(input, output, metadata, block_size):
         if 'path' in meta_df.columns and 'path' in df.columns:
             metadata_columns = [
                 column
-                for column in ['path', 'label_group', 'split']
+                for column in [
+                    'path',
+                    'label_group',
+                    'crypto_family',
+                    'ransomware_family',
+                    'split',
+                ]
                 if column in meta_df.columns
             ]
-            df = df.merge(meta_df[metadata_columns], on='path', how='left')
+            df['__path_key'] = df['path'].map(normalize_path_key)
+            metadata_view = meta_df[metadata_columns].copy()
+            metadata_view['__path_key'] = metadata_view['path'].map(normalize_path_key)
+            metadata_view = metadata_view.drop(columns=['path'])
+            df = df.merge(metadata_view, on='__path_key', how='left')
+            df = df.drop(columns=['__path_key'])
     elif 'path' in df.columns:
         known_labels = {
             'not_encrypted',
@@ -179,6 +297,8 @@ def extract_features(input, output, metadata, block_size):
             if Path(file_path).parent.name in known_labels
             else None
         )
+
+    df = add_crypto_family_column(df)
     
     # Save output
     os.makedirs(os.path.dirname(output) or '.', exist_ok=True)
@@ -198,6 +318,7 @@ def train(features, label_column, model_output, report_dir, metadata):
     
     # Load features
     df = pd.read_parquet(features)
+    df = add_crypto_family_column(df)
     click.echo(f"Loaded {len(df)} samples with {len(df.columns)} features")
 
     if metadata and os.path.exists(metadata) and 'path' in df.columns:
@@ -206,6 +327,19 @@ def train(features, label_column, model_output, report_dir, metadata):
             merge_columns = ['path']
             if label_column in meta_df.columns:
                 merge_columns.append(label_column)
+            for optional_column in ['label_group', 'crypto_family', 'ransomware_family']:
+                if (
+                    optional_column in meta_df.columns
+                    and optional_column not in merge_columns
+                    and optional_column not in df.columns
+                ):
+                    merge_columns.append(optional_column)
+            if (
+                label_column == 'crypto_family'
+                and 'label_group' in meta_df.columns
+                and 'label_group' not in df.columns
+            ):
+                merge_columns.append('label_group')
             if 'split' in meta_df.columns:
                 merge_columns.append('split')
 
@@ -217,7 +351,11 @@ def train(features, label_column, model_output, report_dir, metadata):
                 rename_map['split'] = '__metadata_split'
             metadata_view = metadata_view.rename(columns=rename_map)
 
-            df = df.merge(metadata_view, on='path', how='left')
+            df['__path_key'] = df['path'].map(normalize_path_key)
+            metadata_view['__path_key'] = metadata_view['path'].map(normalize_path_key)
+            metadata_view = metadata_view.drop(columns=['path'])
+            df = df.merge(metadata_view, on='__path_key', how='left')
+            df = df.drop(columns=['__path_key'])
 
             metadata_label = f'__metadata_{label_column}'
             if metadata_label in df.columns:
@@ -226,6 +364,8 @@ def train(features, label_column, model_output, report_dir, metadata):
             if '__metadata_split' in df.columns:
                 df['split'] = df['split'].fillna(df['__metadata_split'])
                 df = df.drop(columns=['__metadata_split'])
+
+    df = add_crypto_family_column(df)
     
     # Check if label column exists
     if label_column not in df.columns:

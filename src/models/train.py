@@ -28,6 +28,8 @@ class ModelTrainer:
         "sample_id",
         "path",
         "label_group",
+        "crypto_family",
+        "ransomware_family",
         "algorithm",
         "mode",
         "key_size",
