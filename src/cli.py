@@ -246,8 +246,15 @@ def build_ransomware_metadata(
 @click.option('--input', '-i', required=True, help='Input file or directory')
 @click.option('--output', '-o', default='data/features/features.parquet', help='Output parquet file')
 @click.option('--metadata', '-m', help='Metadata CSV file with labels')
-@click.option('--block-size', default=4096, help='Block size for entropy calculation')
-def extract_features(input, output, metadata, block_size):
+@click.option('--block-size', default=4096, type=click.IntRange(min=1), help='Block size for entropy calculation')
+@click.option(
+    '--workers',
+    default=1,
+    show_default=True,
+    type=click.IntRange(min=0),
+    help='Parallel worker processes. Use 0 to auto-select CPU count.',
+)
+def extract_features(input, output, metadata, block_size, workers):
     """Extract features from files"""
     click.echo(f"Extracting features from: {input}")
     
@@ -266,7 +273,7 @@ def extract_features(input, output, metadata, block_size):
     click.echo(f"Found {len(files)} files")
     
     # Extract features
-    df = extract_features_batch(files, block_size=block_size, verbose=True)
+    df = extract_features_batch(files, block_size=block_size, workers=workers, verbose=True)
     
     # Add labels from metadata if provided
     if metadata and os.path.exists(metadata):

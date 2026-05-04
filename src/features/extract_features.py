@@ -3,15 +3,24 @@ Extract features from encrypted files
 """
 
 import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-import pandas as pd
 from typing import Dict, Any, List
+
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
-from src.features.entropy import calculate_entropy, calculate_block_entropy
+from src.features.entropy import (
+    calculate_entropy,
+    calculate_entropy_from_counts,
+    calculate_block_entropy,
+)
 from src.features.byte_stats import (
-    calculate_byte_frequencies, 
+    calculate_byte_counts,
+    calculate_byte_frequencies_from_counts,
     calculate_byte_statistics,
+    calculate_byte_statistics_from_counts,
     get_file_magic_bytes,
     get_footer_bytes
 )
@@ -39,7 +48,7 @@ def _ratio(count: int, total: int) -> float:
     return count / total if total else 0.0
 
 
-def calculate_advanced_byte_features(data: bytes) -> Dict[str, float]:
+def calculate_advanced_byte_features(data: bytes, byte_counts=None) -> Dict[str, float]:
     """Calculate statistical byte features useful for encrypted-family fingerprints."""
     data_len = len(data)
     if data_len == 0:
@@ -56,14 +65,18 @@ def calculate_advanced_byte_features(data: bytes) -> Dict[str, float]:
             'mean_byte_run_length': 0.0,
         }
 
+    counts = (
+        np.asarray(byte_counts, dtype=np.float64)
+        if byte_counts is not None
+        else calculate_byte_counts(data).astype(np.float64)
+    )
     expected = data_len / 256
-    counts = [0] * 256
-    for byte in data:
-        counts[byte] += 1
-    chi_square = sum(((count - expected) ** 2) / expected for count in counts) if expected else 0.0
+    chi_square = float(np.sum(((counts - expected) ** 2) / expected)) if expected else 0.0
 
-    sample = data[: min(data_len, 1_000_000)]
-    if len(sample) < 2:
+    byte_values = np.frombuffer(data, dtype=np.uint8)
+    sample = byte_values[: min(data_len, 1_000_000)]
+    sample_size = len(sample)
+    if sample_size < 2:
         return {
             'byte_chi_square_uniformity': chi_square,
             'byte_serial_correlation': 0.0,
@@ -77,54 +90,47 @@ def calculate_advanced_byte_features(data: bytes) -> Dict[str, float]:
             'mean_byte_run_length': float(data_len),
         }
 
-    n_pairs = len(sample) - 1
-    equal_pairs = 0
-    abs_diffs = []
-    xor_values = []
-    bigrams = set()
+    n_pairs = sample_size - 1
+    left_values = sample[:-1]
+    right_values = sample[1:]
+    left_int = left_values.astype(np.int16)
+    right_int = right_values.astype(np.int16)
 
-    for left, right in zip(sample, sample[1:]):
-        if left == right:
-            equal_pairs += 1
-        abs_diffs.append(abs(left - right))
-        xor_values.append(left ^ right)
-        bigrams.add((left, right))
+    equal_pairs = int(np.count_nonzero(left_values == right_values))
+    abs_diffs = np.abs(left_int - right_int)
+    xor_values = np.bitwise_xor(left_values, right_values)
+    diff_mean = float(np.mean(abs_diffs))
+    diff_std = float(np.std(abs_diffs))
+    xor_mean = float(np.mean(xor_values))
 
-    diff_mean = sum(abs_diffs) / n_pairs
-    diff_var = sum((value - diff_mean) ** 2 for value in abs_diffs) / n_pairs
-    xor_mean = sum(xor_values) / n_pairs
-
-    x_values = sample[:-1]
-    y_values = sample[1:]
-    x_mean = sum(x_values) / n_pairs
-    y_mean = sum(y_values) / n_pairs
-    covariance = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_values, y_values)) / n_pairs
-    x_var = sum((x - x_mean) ** 2 for x in x_values) / n_pairs
-    y_var = sum((y - y_mean) ** 2 for y in y_values) / n_pairs
+    x_values = left_values.astype(np.float64)
+    y_values = right_values.astype(np.float64)
+    x_mean = float(np.mean(x_values))
+    y_mean = float(np.mean(y_values))
+    covariance = float(np.mean((x_values - x_mean) * (y_values - y_mean)))
+    x_var = float(np.mean((x_values - x_mean) ** 2))
+    y_var = float(np.mean((y_values - y_mean) ** 2))
     serial_correlation = covariance / ((x_var * y_var) ** 0.5) if x_var and y_var else 0.0
 
-    run_count = 1
-    current_run = 1
-    longest_run = 1
-    for left, right in zip(sample, sample[1:]):
-        if left == right:
-            current_run += 1
-            longest_run = max(longest_run, current_run)
-        else:
-            run_count += 1
-            current_run = 1
+    bigram_codes = left_values.astype(np.uint16) * 256 + right_values.astype(np.uint16)
+    unique_bigram_count = int(np.unique(bigram_codes).size)
+
+    run_breaks = np.flatnonzero(left_values != right_values) + 1
+    run_count = int(len(run_breaks) + 1)
+    run_boundaries = np.concatenate(([0], run_breaks, [sample_size]))
+    longest_run = int(np.max(np.diff(run_boundaries)))
 
     return {
         'byte_chi_square_uniformity': chi_square,
         'byte_serial_correlation': serial_correlation,
         'adjacent_equal_byte_ratio': equal_pairs / n_pairs,
         'adjacent_abs_diff_mean': diff_mean,
-        'adjacent_abs_diff_std': diff_var ** 0.5,
+        'adjacent_abs_diff_std': diff_std,
         'adjacent_xor_mean': xor_mean,
-        'unique_bigram_ratio': len(bigrams) / min(n_pairs, 65536),
-        'run_count_ratio': run_count / len(sample),
+        'unique_bigram_ratio': unique_bigram_count / min(n_pairs, 65536),
+        'run_count_ratio': run_count / sample_size,
         'longest_byte_run': float(longest_run),
-        'mean_byte_run_length': len(sample) / run_count,
+        'mean_byte_run_length': sample_size / run_count,
     }
 
 
@@ -222,8 +228,10 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     features['file_size_mod_16'] = file_size % 16
     features['file_size_mod_256'] = file_size % 256
     
+    byte_counts = calculate_byte_counts(data)
+
     # Full entropy
-    full_entropy = calculate_entropy(data)
+    full_entropy = calculate_entropy_from_counts(byte_counts, file_size)
     features['shannon_entropy_full'] = full_entropy
     
     # Block entropy
@@ -239,8 +247,8 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     features['very_high_entropy_block_ratio'] = entropy_stats.get('very_high_entropy_ratio', 0.0)
     
     # Byte statistics
-    byte_freqs = calculate_byte_frequencies(data)
-    byte_stats = calculate_byte_statistics(data)
+    byte_freqs = calculate_byte_frequencies_from_counts(byte_counts, file_size)
+    byte_stats = calculate_byte_statistics_from_counts(byte_counts, file_size)
     
     features['unique_byte_count'] = byte_stats['unique_bytes']
     features['printable_byte_ratio'] = byte_stats['printable_ratio']
@@ -256,7 +264,7 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
         features[f'byte_{byte_val}_freq'] = byte_freqs[byte_val]
 
     # Advanced encrypted-file statistics
-    features.update(calculate_advanced_byte_features(data))
+    features.update(calculate_advanced_byte_features(data, byte_counts=byte_counts))
     features.update(calculate_segment_features(data))
     features.update(calculate_filename_features(file_path))
     
@@ -276,10 +284,19 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     return features
 
 
+def _extract_features_worker(args):
+    file_path, block_size = args
+    try:
+        return extract_features_from_file(file_path, block_size), None
+    except Exception as exc:
+        return None, f"Error processing {file_path}: {exc}"
+
+
 def extract_features_batch(
     file_paths: List[str],
     output_file: str = None,
     block_size: int = 4096,
+    workers: int = 1,
     verbose: bool = True
 ) -> pd.DataFrame:
     """
@@ -289,28 +306,47 @@ def extract_features_batch(
         file_paths: List of file paths
         output_file: Optional output parquet file
         block_size: Block size for entropy calculation
+        workers: Number of worker processes. Use 0 to auto-select CPU count.
         verbose: Show progress bar
     
     Returns:
         DataFrame with extracted features
     """
+    if workers == 0:
+        workers = max((os.cpu_count() or 2) - 1, 1)
+
     all_features = []
-    
-    iterator = tqdm(file_paths, desc="Extracting features") if verbose else file_paths
-    
-    for file_path in iterator:
-        try:
-            features = extract_features_from_file(file_path, block_size)
+
+    if workers <= 1 or len(file_paths) <= 1:
+        iterator = tqdm(file_paths, desc="Extracting features") if verbose else file_paths
+        for file_path in iterator:
+            features, error = _extract_features_worker((file_path, block_size))
+            if error:
+                if verbose:
+                    print(error)
+                continue
             all_features.append(features)
-        except Exception as e:
-            if verbose:
-                print(f"Error processing {file_path}: {e}")
-            continue
+    else:
+        worker_args = ((file_path, block_size) for file_path in file_paths)
+        chunk_size = max(1, len(file_paths) // (workers * 4))
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            results = executor.map(_extract_features_worker, worker_args, chunksize=chunk_size)
+            iterator = (
+                tqdm(results, total=len(file_paths), desc=f"Extracting features ({workers} workers)")
+                if verbose
+                else results
+            )
+            for features, error in iterator:
+                if error:
+                    if verbose:
+                        print(error)
+                    continue
+                all_features.append(features)
     
     df = pd.DataFrame(all_features)
     
     if output_file:
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
         df.to_parquet(output_file, index=False)
     
     return df
