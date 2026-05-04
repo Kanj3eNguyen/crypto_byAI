@@ -38,6 +38,16 @@ class ModelTrainer:
         "tool",
         "split",
     }
+    LEAKY_FEATURE_PREFIXES = (
+        "filename_",
+        "final_extension_",
+    )
+    LEAKY_FEATURE_COLUMNS = {
+        "suffix_count",
+        "has_double_extension",
+        "prior_extension_is_common_original",
+        "final_extension_is_common_original",
+    }
 
     def __init__(self, model_type: str = "random_forest", random_state: int = 42):
         self.model_type = model_type
@@ -78,6 +88,13 @@ class ModelTrainer:
         exclude_columns.add(label_column)
 
         feature_df = df.drop(columns=[c for c in exclude_columns if c in df.columns])
+        leaky_columns = [
+            column
+            for column in feature_df.columns
+            if column in self.LEAKY_FEATURE_COLUMNS
+            or column.startswith(self.LEAKY_FEATURE_PREFIXES)
+        ]
+        feature_df = feature_df.drop(columns=leaky_columns)
         feature_df = feature_df.select_dtypes(include=[np.number])
         if feature_df.empty:
             raise ValueError("No numeric feature columns found for training")

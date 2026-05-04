@@ -4,7 +4,6 @@ Extract features from encrypted files
 
 import os
 from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
 from typing import Dict, Any, List
 
 import numpy as np
@@ -25,27 +24,6 @@ from src.features.byte_stats import (
     get_footer_bytes
 )
 from src.features.file_structure import analyze_file_structure
-
-
-COMMON_ORIGINAL_EXTENSIONS = {
-    '.csv',
-    '.doc',
-    '.docx',
-    '.exe',
-    '.jpg',
-    '.jpeg',
-    '.pdf',
-    '.ppt',
-    '.pptx',
-    '.txt',
-    '.xls',
-    '.xlsx',
-    '.zip',
-}
-
-
-def _ratio(count: int, total: int) -> float:
-    return count / total if total else 0.0
 
 
 def calculate_advanced_byte_features(data: bytes, byte_counts=None) -> Dict[str, float]:
@@ -167,40 +145,6 @@ def calculate_segment_features(data: bytes) -> Dict[str, float]:
     return features
 
 
-def calculate_filename_features(file_path: str) -> Dict[str, float]:
-    """Calculate numeric filename/extension features often exposed by ransomware outputs."""
-    path = Path(file_path)
-    name = path.name
-    suffixes = path.suffixes
-    final_suffix = suffixes[-1].lower() if suffixes else ''
-    prior_suffix = suffixes[-2].lower() if len(suffixes) >= 2 else ''
-    final_suffix_text = final_suffix.lstrip('.')
-
-    final_len = len(final_suffix_text)
-    alpha_count = sum(1 for char in final_suffix_text if char.isalpha())
-    digit_count = sum(1 for char in final_suffix_text if char.isdigit())
-    hex_count = sum(1 for char in final_suffix_text.lower() if char in '0123456789abcdef')
-    vowel_count = sum(1 for char in final_suffix_text.lower() if char in 'aeiou')
-    ascii_values = [ord(char) for char in final_suffix_text]
-
-    return {
-        'filename_length': len(name),
-        'filename_digit_ratio': _ratio(sum(1 for char in name if char.isdigit()), len(name)),
-        'filename_alpha_ratio': _ratio(sum(1 for char in name if char.isalpha()), len(name)),
-        'suffix_count': len(suffixes),
-        'has_double_extension': float(len(suffixes) >= 2),
-        'final_extension_length': final_len,
-        'final_extension_entropy': calculate_entropy(final_suffix_text.encode('utf-8')),
-        'final_extension_alpha_ratio': _ratio(alpha_count, final_len),
-        'final_extension_digit_ratio': _ratio(digit_count, final_len),
-        'final_extension_hex_ratio': _ratio(hex_count, final_len),
-        'final_extension_vowel_ratio': _ratio(vowel_count, final_len),
-        'final_extension_ascii_mean': sum(ascii_values) / final_len if final_len else 0.0,
-        'prior_extension_is_common_original': float(prior_suffix in COMMON_ORIGINAL_EXTENSIONS),
-        'final_extension_is_common_original': float(final_suffix in COMMON_ORIGINAL_EXTENSIONS),
-    }
-
-
 def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[str, Any]:
     """
     Extract all features from a single file
@@ -266,7 +210,6 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     # Advanced encrypted-file statistics
     features.update(calculate_advanced_byte_features(data, byte_counts=byte_counts))
     features.update(calculate_segment_features(data))
-    features.update(calculate_filename_features(file_path))
     
     # File structure
     structure = analyze_file_structure(data, file_path)
