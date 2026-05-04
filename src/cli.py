@@ -28,6 +28,15 @@ CRYPTO_FAMILY_MAP = {
 }
 
 
+CRYPTO_FAMILY_DEFINITIONS = {
+    'block_cipher_like': ['AES_like', '3DES_like'],
+    'stream_cipher_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
+    'compressed_only': ['compressed_only'],
+    'not_encrypted': ['not_encrypted'],
+    'unknown_encrypted': ['unknown_encrypted'],
+}
+
+
 def add_crypto_family_column(df: pd.DataFrame) -> pd.DataFrame:
     """Add broad crypto family labels derived from label_group."""
     if 'label_group' in df.columns and 'crypto_family' not in df.columns:
@@ -381,6 +390,11 @@ def train(features, label_column, model_output, report_dir, metadata):
     click.echo(f"Prepared {len(X)} samples with {X.shape[1]} features")
     
     train_info = trainer.train(X, y, split=split)
+    if label_column == 'crypto_family':
+        train_info['class_definitions'] = {
+            class_name: CRYPTO_FAMILY_DEFINITIONS.get(class_name, [class_name])
+            for class_name in train_info['classes']
+        }
     click.echo(
         "Trained model: "
         f"split={train_info['evaluation_split']}, "

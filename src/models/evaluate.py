@@ -132,6 +132,15 @@ class ModelEvaluator:
             f.write(f"Recall (Macro): {self.metrics['recall_macro']:.4f}\n")
             f.write(f"F1 Score (Macro): {self.metrics['f1_macro']:.4f}\n")
             f.write(f"F1 Score (Weighted): {self.metrics['f1_weighted']:.4f}\n\n")
+
+            class_definitions = self.metrics.get('class_definitions')
+            if class_definitions:
+                f.write("CLASS DEFINITIONS\n")
+                f.write("-" * 50 + "\n")
+                for class_name, members in class_definitions.items():
+                    member_text = ", ".join(members)
+                    f.write(f"{class_name}: {member_text}\n")
+                f.write("\n")
             
             # Write per-class metrics
             f.write("PER-CLASS METRICS\n")
