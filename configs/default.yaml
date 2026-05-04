@@ -1,0 +1,106 @@
+# Default configuration for Ransomware Crypto AI Project
+
+dataset:
+  raw_dir: "data/raw/original"
+  generated_dir: "data/generated"
+  metadata_dir: "data/metadata"
+  features_dir: "data/features"
+  
+  # Split ratios
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+encryption:
+  # Encryption algorithms to generate
+  algorithms:
+    - name: "AES"
+      modes:
+        - "CBC"
+        - "CTR"
+        - "GCM"
+      key_sizes: [128, 192, 256]
+    - name: "ChaCha20"
+      modes: []
+      key_sizes: [256]
+    - name: "Salsa20"
+      modes: []
+      key_sizes: [256]
+    - name: "RC4"
+      modes: []
+      key_sizes: [128, 256]
+    - name: "3DES"
+      modes: ["CBC"]
+      key_sizes: [192]
+
+feature_extraction:
+  # Block size for entropy calculation
+  block_size: 4096
+  
+  # Entropy thresholds for feature generation
+  entropy_threshold_high: 7.5
+  entropy_threshold_very_high: 7.8
+  
+  # Features to extract
+  features:
+    - file_size
+    - entropy_full
+    - entropy_stats
+    - byte_histogram
+    - printable_ratio
+    - null_byte_ratio
+    - unique_bytes
+    - magic_bytes
+    - header_footer_features
+
+model:
+  # Model type: random_forest, xgboost, svm, logistic_regression
+  type: "random_forest"
+  
+  # Random Forest parameters
+  random_forest:
+    n_estimators: 200
+    max_depth: 20
+    min_samples_split: 5
+    min_samples_leaf: 2
+    random_state: 42
+    n_jobs: -1
+    
+  # XGBoost parameters (optional)
+  xgboost:
+    n_estimators: 200
+    max_depth: 8
+    learning_rate: 0.1
+    random_state: 42
+    n_jobs: -1
+
+evaluation:
+  # Metrics to calculate
+  metrics:
+    - accuracy
+    - precision_macro
+    - recall_macro
+    - f1_macro
+    - f1_weighted
+    - confusion_matrix
+    - classification_report
+  
+  # Report output paths
+  report_dir: "reports"
+
+prediction:
+  # Number of top predictions to return
+  top_k: 3
+  
+  # Confidence threshold for warning
+  confidence_warning_threshold: 0.7
+
+labels:
+  - not_encrypted
+  - compressed_only
+  - AES_like
+  - ChaCha20_Salsa20_like
+  - RC4_like
+  - 3DES_like
+  - hybrid_AES_RSA_like
+  - unknown_encrypted
