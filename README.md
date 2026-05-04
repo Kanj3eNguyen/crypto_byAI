@@ -238,7 +238,8 @@ Tao metadata family:
 python -m src.cli build-ransomware-metadata `
   --input data/ransomware_family `
   --output data/metadata/ransomware_family_dataset.csv `
-  --limit-per-family 500
+  
+  
 ```
 
 Trich xuat feature:
