@@ -7,7 +7,6 @@ import zipfile
 import gzip
 import shutil
 from pathlib import Path
-from typing import List, Dict, Any
 
 
 class CompressedSampleGenerator:

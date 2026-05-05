@@ -176,12 +176,6 @@ def _random_like_segment(data: bytes, min_len: int = 8) -> float:
     return 0.0
 
 
-def _read_footer_length_marker(data: bytes) -> int:
-    """Read a plausible 4-byte little/big endian footer length marker."""
-    footer_length, _ = _find_footer_marker(data)
-    return footer_length
-
-
 def _plausible_footer_length_values(data_len: int, value: int) -> bool:
     """Return whether a decoded footer length marker is plausible."""
     max_footer_size = min(data_len - 4, 4096)

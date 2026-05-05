@@ -51,6 +51,19 @@ AEAD_HINTS = (
 )
 
 
+PREDICTION_FEATURE_SUMMARY_KEYS = (
+    'shannon_entropy_full',
+    'entropy_mean',
+    'high_entropy_block_ratio',
+    'unique_byte_count',
+    'printable_byte_ratio',
+    'footer_metadata_score',
+    'footer_nonce12_tag16_like',
+    'footer_nonce24_tag16_like',
+    'footer_rsa2048_wrapped_key_like',
+)
+
+
 LEGACY_LABEL_ALIASES = {
     'unknown_high_entropy': 'unknown_encrypted',
 }
@@ -242,6 +255,14 @@ def possible_encryption_summary_for_label(label: str) -> str:
         return f'{group}: none'
 
     return f'{group}: {"/".join(algorithm_names)}'
+
+
+def summarize_prediction_features(features: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the compact feature subset exposed in prediction responses."""
+    return {
+        key: features.get(key, 0)
+        for key in PREDICTION_FEATURE_SUMMARY_KEYS
+    }
 
 
 def is_encrypted_label(label: str) -> bool:
@@ -542,20 +563,7 @@ def predict_all(
         predicted_class=predicted_class,
         confidence=confidence,
         top_predictions=crypto_result['top_predictions'],
-        features_summary={
-            'shannon_entropy_full': features.get('shannon_entropy_full', 0),
-            'entropy_mean': features.get('entropy_mean', 0),
-            'high_entropy_block_ratio': features.get('high_entropy_block_ratio', 0),
-            'unique_byte_count': features.get('unique_byte_count', 0),
-            'printable_byte_ratio': features.get('printable_byte_ratio', 0),
-            'footer_metadata_score': features.get('footer_metadata_score', 0),
-            'footer_nonce12_tag16_like': features.get('footer_nonce12_tag16_like', 0),
-            'footer_nonce24_tag16_like': features.get('footer_nonce24_tag16_like', 0),
-            'footer_rsa2048_wrapped_key_like': features.get(
-                'footer_rsa2048_wrapped_key_like',
-                0,
-            ),
-        },
+        features_summary=summarize_prediction_features(features),
         evidence=evidence,
         top_groups=crypto_result.get('top_groups'),
         basis=basis,

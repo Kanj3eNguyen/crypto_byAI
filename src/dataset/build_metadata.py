@@ -5,7 +5,6 @@ Build metadata CSV from generated samples
 import os
 import csv
 from pathlib import Path
-from typing import Dict, Any, List
 
 
 def build_metadata_csv(

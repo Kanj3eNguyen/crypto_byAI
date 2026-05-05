@@ -6,7 +6,6 @@ import pytest
 import tempfile
 import os
 from src.features.extract_features import extract_features_from_file
-from src.features.entropy import calculate_entropy
 
 
 class TestFeatureExtraction:

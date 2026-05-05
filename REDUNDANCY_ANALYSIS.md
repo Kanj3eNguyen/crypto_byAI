@@ -1,439 +1,232 @@
-# Phân Tích Các Phần Thừa (Redundancy Analysis)
+# Redundancy Analysis
 
-## Tóm Tắt
-Đã phát hiện **12 vấn đề chính** liên quan đến mã thừa, trùng lặp, hoặc không cần thiết trong dự án.
+This file tracks cleanup opportunities in the current repository. It replaces
+the older generated analysis that had stale paths and broken encoding.
 
----
+## Summary
 
-## 1. **MÃ THỪA TRONG MODULE CRYPTO** ⚠️ PRIORITY: HIGH
-### Vấn đề
-11 file mã hóa (`encrypt_*.py`) có cấu trúc **gần hệt nhau** với hàng chục dòng mã bị lặp lại:
+Recent cleanup has already removed several safe redundancies:
 
-#### Mã Lặp Lại:
-```python
-# Trong tất cả encrypt_*.py files:
-- get_random_bytes() để sinh keys
-- .new(...) để tạo cipher
-- append_metadata_footer() 
-- Cấu trúc metadata dictionary giống nhau
-- Return tuple (ciphertext, metadata)
+- unused imports in CLI, API-adjacent modules, dataset helpers, and tests;
+- one unused private footer helper in feature extraction;
+- duplicate prediction feature-summary dictionaries;
+- duplicate crypto-family mapping in CLI;
+- redundant `Predictor` construction in the API prediction path.
+
+The repo now keeps the most important crypto prediction labels and display
+metadata in `src/models/predict.py`.
+
+## Resolved Or Partially Resolved
+
+### 1. Duplicate crypto-family mapping
+
+Status: partially resolved.
+
+Current source of truth:
+
+```text
+src/models/predict.py
+  LABEL_TO_CRYPTO_GROUP
+  CRYPTO_GROUP_LABELS
+  LABEL_TO_ALGORITHM_NAMES
+  LABEL_TO_ENCRYPTION_TYPES
 ```
 
-#### Files Bị Ảnh Hưởng:
-- `encrypt_aes.py` (6 hàm riêng cho mỗi mode: CBC, ECB, CTR, CFB, OFB, GCM)
-- `encrypt_des.py`
-- `encrypt_3des.py`
-- `encrypt_blowfish.py`
-- `encrypt_rc2.py` / `encrypt_arc2.py`
-- `encrypt_cast.py`
-- `encrypt_chacha20.py`
-- `encrypt_salsa20.py`
-- `encrypt_rc4.py`
-- `encrypt_xor.py`
-- `encrypt_hybrid.py`
+`src/cli.py` imports those constants instead of maintaining a second full copy.
 
-### Đề Xuất Khắc Phục
-Tạo **factory pattern** chung:
-```python
-# src/crypto/cipher_factory.py
-class CipherFactory:
-    @staticmethod
-    def encrypt(algorithm: str, data: bytes, **params):
-        """Unified encryption interface"""
-        
-    @staticmethod
-    def create_cipher(algorithm, mode, key_size):
-        """Unified cipher creation"""
+Remaining possible cleanup:
+
+- Move constants to a dedicated module only if the mapping grows further, for
+  example `src/constants/crypto_labels.py`.
+
+### 2. Duplicate feature summary formatting
+
+Status: resolved.
+
+Current helper:
+
+```text
+src/models/predict.py::summarize_prediction_features
 ```
 
-**Tiết Kiệm**: ~800 dòng mã → ~150 dòng
+It is used by:
 
----
-
-## 2. **MAPPING DICTIONARIES DUPLICATE** ⚠️ PRIORITY: HIGH
-### Vấn đề
-Ba chỗ định nghĩa cùng mapping `label → crypto_family`:
-
-#### Nơi 1: `src/cli.py` (dòng ~31-50)
-```python
-CRYPTO_FAMILY_MAP = {
-    'AES_like': 'block_padded_mode_like',
-    '3DES_like': 'block_padded_mode_like',
-    # ... 15 entries
-}
-
-CRYPTO_FAMILY_DEFINITIONS = {
-    'block_padded_mode_like': [...],
-    # ... 8 entries
-}
+```text
+src/models/predict.py::predict_all
+src/api/app.py
 ```
 
-#### Nơi 2: `src/models/predict.py` (dòng ~1-40)
-```python
-LABEL_TO_CRYPTO_GROUP = {
-    'AES_like': 'block_padded_mode_like',
-    '3DES_like': 'block_padded_mode_like',
-    # ... duplicate của CRYPTO_FAMILY_MAP
-}
+### 3. API recreated Predictor during request handling
+
+Status: resolved.
+
+`src/api/app.py` now reuses `_predictor.generate_evidence(...)`.
+
+### 4. Unused imports and unused private helper
+
+Status: resolved for obvious cases.
+
+Files cleaned:
+
+```text
+src/cli.py
+src/config.py
+src/crypto/encrypt_aes.py
+src/dataset/build_metadata.py
+src/dataset/generate_compressed_samples.py
+src/dataset/generate_encrypted_samples.py
+src/dataset/split_original_files.py
+src/features/extract_features.py
+src/models/evaluate.py
+tests/test_feature_extraction.py
 ```
 
-#### Nơi 3: Sử dụng rải rác trong 3 files:
-- Hàm `add_crypto_family_column()` ở `cli.py`
-- Logic tương tự ở `predict.py`
+## Remaining Opportunities
 
-### Đề Xuất Khắc Phục
-Tạo module trung tâm:
-```python
-# src/constants/crypto_mappings.py
-LABEL_TO_CRYPTO_FAMILY = {...}  # Single source of truth
-CRYPTO_FAMILY_DEFINITIONS = {...}
-ALGORITHM_GUESS_MAP = {...}
+### 1. CLI command size
+
+Status: still present.
+
+`src/cli.py` still contains generation, extraction, training, prediction, and
+metadata commands in one file. This is acceptable for the current repo size, but
+could be split later:
+
+```text
+src/cli/
+  __init__.py
+  main.py
+  commands/
+    generate.py
+    extract.py
+    train.py
+    predict.py
 ```
 
-Import khắp nơi:
-```python
-# Trong cli.py, predict.py
-from src.constants.crypto_mappings import LABEL_TO_CRYPTO_FAMILY
+Risk: medium. Splitting Click commands can create import and packaging churn.
+Only do this when CLI grows further.
+
+### 2. API and CLI prediction behavior differ
+
+Status: still present by design.
+
+CLI:
+
+```text
+models/crypto_family_predictor.pkl
+models/ransomware_family_predictor.pkl
 ```
 
-**Tiết Kiệm**: Loại bỏ 2 bản copy, 1 source of truth
+API:
 
----
-
-## 3. **BYTE STATISTICS FUNCTIONS TÍNH TOÁN LẠI DỮ LIỆU** ⚠️ PRIORITY: MEDIUM
-### Vấn đề
-Trong `src/features/byte_stats.py`:
-
-- `calculate_byte_statistics()` gọi `calculate_byte_counts()` và recalculate từ đầu
-- `calculate_byte_frequencies()` làm tương tự
-- `calculate_segment_features()` ở `extract_features.py` gọi lại `calculate_byte_statistics()` cho mỗi segment
-
-#### Kết Quả
-Cùng một file bytes được tính `byte_counts` **nhiều lần**:
-```
-first_256 → byte_counts → statistics ✗
-first_1024 → byte_counts → statistics ✗
-middle_1024 → byte_counts → statistics ✗
-last_256 → byte_counts → statistics ✗
-last_1024 → byte_counts → statistics ✗
+```text
+models/crypto_predictor.pkl
 ```
 
-### Đề Xuất Khắc Phục
-Cache byte_counts:
-```python
-def calculate_segment_features(data: bytes):
-    # Calculate once
-    segment_counts = {
-        'first_256': calculate_byte_counts(data[:256]),
-        'first_1024': calculate_byte_counts(data[:1024]),
-        # ...
+Potential cleanup:
+
+- update API to call `predict_all()` for the same crypto+ransomware response as
+  CLI; or
+- document API as crypto-only and keep it intentionally smaller.
+
+Current README documents this difference.
+
+### 3. Crypto encryptor modules have repeated structure
+
+Status: still present.
+
+The encryptors share common patterns:
+
+- create key/nonce/IV;
+- create cipher;
+- encrypt data;
+- append footer metadata;
+- return `(ciphertext, metadata)`.
+
+Potential cleanup:
+
+- add helper functions for metadata formatting;
+- keep one file per algorithm to preserve readability.
+
+Avoid a large factory refactor unless tests are expanded first.
+
+### 4. Feature extraction still recalculates small segment statistics
+
+Status: still present but acceptable.
+
+`calculate_segment_features()` calculates stats per segment. This is simple and
+safe. Optimizing it may improve speed, but should be benchmarked first.
+
+### 5. Public helper modules with low usage
+
+Status: intentionally kept.
+
+Examples:
+
+```text
+src/dataset/build_metadata.py
+src/dataset/generate_compressed_samples.py
+src/dataset/split_original_files.py::get_split_info
+src/features/byte_stats.py::calculate_byte_frequencies
+```
+
+They may be useful for scripts outside the repo, so they were not removed.
+
+### 6. Test environment dependency
+
+Status: still present.
+
+The repo has tests, but the checked local environment may not have `pytest` and
+`pytest-cov` installed. The docs now explicitly include:
+
+```powershell
+py -3.11 -m pip install pytest pytest-cov
+py -3.11 -m pytest
+```
+
+## Current Verification Commands
+
+Compile check:
+
+```powershell
+py -3.11 -m compileall src tests main.py
+```
+
+Predict smoke test:
+
+```powershell
+py -3.11 -m src.cli predict `
+  --file .\data\ransomware_family\0001-doc.doc.uhwuvzu
+```
+
+Expected crypto summary shape:
+
+```text
+possible_encryption_summary: stream_cipher_like: ChaCha20/Salsa20/RC4
+```
+
+Expected ransomware prediction shape:
+
+```json
+{
+  "predicted_family": "BLACKCAT",
+  "confidence": 0.7572,
+  "top_predictions": [
+    {
+      "label": "BLACKCAT",
+      "confidence": 0.7572
     }
-    
-    # Reuse counts
-    for name, counts in segment_counts.items():
-        stats = calculate_byte_statistics_from_counts(counts, len(segment))
-```
-
-**Tác Động**: Tăng tốc độ xử lý ~30% cho feature extraction
-
----
-
-## 4. **ENTROPY CALCULATION TƯƠNG TỰ** ⚠️ PRIORITY: MEDIUM
-### Vấn đề
-`calculate_entropy()` và `calculate_entropy_from_counts()` có logic tương tự nhưng riêng biệt.
-
-`calculate_block_entropy()` tính entropy cho mỗi block bằng cách gọi `calculate_entropy()`, không dùng counts.
-
-Trong `extract_features.py` hàm `_normalized_entropy()` tính entropy lại cho từng segment.
-
-### Đề Xuất Khắc Phục
-Tạo cache/memo:
-```python
-class EntropyCalculator:
-    def __init__(self):
-        self.cache = {}
-    
-    def calculate(self, data_hash, data):
-        # Cache based on hash
-```
-
----
-
-## 5. **CLI COMMAND FACTORIES CHƯA ĐƯỢC TÁCH RA** ⚠️ PRIORITY: LOW-MEDIUM
-### Vấn đề
-`src/cli.py` chứa tất cả command logic:
-- `generate_samples` (~100 dòng)
-- `extract_features` (~50 dòng)
-- `train` (~50 dòng)
-- `predict` (~50 dòng)
-- `evaluate` (~50 dòng)
-
-**Vấn đề**: File có ~500 dòng, khó maintain
-
-### Đề Xuất Khắc Phục
-Tách command:
-```
-src/
-├── cli/
-│   ├── __init__.py
-│   ├── commands/
-│   │   ├── generate.py
-│   │   ├── extract.py
-│   │   ├── train.py
-│   │   ├── predict.py
-│   │   └── evaluate.py
-│   └── main.py
-```
-
----
-
-## 6. **CONFIG MANAGEMENT LẮP LẠI** ⚠️ PRIORITY: LOW
-### Vấn đề
-`src/config.py` định nghĩa `Config` class nhưng không sử dụng trong CLI.
-
-```python
-# config.py có global instance
-def get_config(config_file: str = None) -> Config:
-    global _config
-    if _config is None:
-        _config = Config(config_file)
-    return _config
-
-# Nhưng CLI lấy config trực tiếp:
-config_file = 'configs/default.yaml'  # Hardcoded đôi chỗ
-```
-
-### Đề Xuất Khắc Phục
-```python
-@cli.command()
-@click.option('--config', default='configs/default.yaml')
-def train(config):
-    cfg = get_config(config)
-    # Use cfg throughout
-```
-
----
-
-## 7. **MODELS MODULE INIT IMPORTS QUÁ NHIỀU** ⚠️ PRIORITY: LOW-MEDIUM
-### Vấn đề
-`src/models/__init__.py` không có, buộc phải import:
-```python
-from src.models.train import ModelTrainer
-from src.models.evaluate import ModelEvaluator
-from src.models.predict import Predictor
-```
-
-**Nếu** có `__init__.py`:
-```python
-from .train import ModelTrainer
-from .evaluate import ModelEvaluator
-from .predict import Predictor
-
-__all__ = ['ModelTrainer', 'ModelEvaluator', 'Predictor']
-```
-
-Sau đó import dễ:
-```python
-from src.models import ModelTrainer, Predictor
-```
-
----
-
-## 8. **FEATURE EXTRACTION FUNCTIONS CÓ CẤU TRÚC LẶP** ⚠️ PRIORITY: LOW-MEDIUM
-### Vấn đề
-Trong `extract_features.py`:
-
-- `calculate_advanced_byte_features()` ~150 dòng tính toán byte stats
-- `calculate_segment_features()` ~40 dòng tính toán segment stats
-- `_normalized_entropy()` tính entropy
-
-**Tất cả** có logic:
-1. Kiểm tra empty
-2. Tính toán
-3. Trả về dict
-
-### Đề Xuất Khắc Phục
-Base class:
-```python
-class FeatureCalculator:
-    def _check_empty(self, data):
-        if len(data) == 0:
-            return self._get_empty_features()
-    
-    def calculate(self, data):
-        return self._compute(data)
-```
-
----
-
-## 9. **DATASET GENERATION SPEC LISTS LẶP LẠI** ⚠️ PRIORITY: LOW
-### Vấn đề
-Trong `cli.py` command `generate_samples()`:
-
-```python
-block_specs = [
-    ('AES_like', encrypt_aes_cbc),
-    ('AES_like', encrypt_aes_ecb),
-    # ... 9 entries
-]
-stream_specs = [
-    ('ChaCha20_Salsa20_like', encrypt_chacha20),
-    # ... 2 entries
-]
-weak_specs = [('XOR_like', encrypt_repeating_xor)]
-hybrid_specs = [
-    ('hybrid_AES_RSA_like', encrypt_hybrid_aes_rsa),
-    # ... 2 entries
-]
-```
-
-**Cấu trúc này** có thể move vào config:
-```yaml
-# configs/default.yaml
-dataset_generation:
-  block_algorithms:
-    - [AES_like, encrypt_aes_cbc]
-    - [AES_like, encrypt_aes_ecb]
-    # ...
-```
-
-### Đề Xuất Khắc Phục
-```python
-# src/constants/algorithms.py
-BLOCK_CIPHER_SPECS = [...]
-STREAM_CIPHER_SPECS = [...]
-WEAK_CIPHER_SPECS = [...]
-```
-
----
-
-## 10. **API & CLI DUPLICATE LOADING MODEL** ⚠️ PRIORITY: MEDIUM
-### Vấn đề
-Tương tự nhau:
-
-#### `src/cli.py` command `predict`:
-```python
-model = ModelTrainer()
-model.load_model(model_path)
-predictor = Predictor(model)
-```
-
-#### `src/api/app.py` startup:
-```python
-_model = ModelTrainer()
-_model.load_model(model_path)
-_predictor = Predictor(_model)
-```
-
-### Đề Xuất Khắc Phục
-Tạo helper:
-```python
-# src/models/loader.py
-def load_predictor(model_path: str) -> Predictor:
-    model = ModelTrainer()
-    model.load_model(model_path)
-    return Predictor(model)
-
-# Sử dụng:
-# cli.py
-predictor = load_predictor(model_path)
-
-# app.py
-_predictor = load_predictor(model_path)
-```
-
----
-
-## 11. **METADATA COLUMNS DEFINITION RẢI RÁC** ⚠️ PRIORITY: LOW-MEDIUM
-### Vấn đề
-Định nghĩa metadata columns ở **3 nơi**:
-
-#### `src/models/train.py`:
-```python
-METADATA_COLUMNS = {
-    "sample_id",
-    "path",
-    "label_group",
-    # ... 10 columns
+  ]
 }
 ```
 
-#### Implicit trong `src/dataset/generate_encrypted_samples.py`:
-```python
-metadata = {
-    'sample_id': sample_id,
-    'path': encrypted_path,
-    'label_group': label_group,
-    # ... same fields
-}
-```
+## Recommendation
 
-#### Usage ở `src/cli.py` khi processing CSV
+Do not perform large structural refactors until the following are in place:
 
-### Đề Xuất Khắc Phục
-```python
-# src/constants/metadata.py
-METADATA_SCHEMA = {
-    'sample_id': str,
-    'path': str,
-    'label_group': str,
-    # ...
-}
+- pytest and pytest-cov installed in the active environment;
+- tests for API prediction;
+- tests for CLI train/extract command behavior;
+- one or two real benchmark commands for feature extraction speed.
 
-# Sau dùng cho:
-# - Tạo DataFrame
-# - Validate data
-# - Generate samples
-```
-
----
-
-## 12. **TESTING COVERAGE KHÔNG COMPLETE** ⚠️ PRIORITY: MEDIUM
-### Vấn đề
-`tests/` folder có:
-- `test_crypto_generation.py`
-- `test_entropy.py`
-- `test_feature_extraction.py`
-- `test_prediction_schema.py`
-
-**Nhưng** không có tests cho:
-- `src/config.py`
-- `src/crypto/footer.py`
-- `src/models/evaluate.py`
-- `src/dataset/split_original_files.py`
-
-### Đề Xuất Khắc Phục
-Thêm tests cho các modules thiếu
-
----
-
-## TÓNG KẾT KHẮC PHỤC ĐỀ XUẤT
-
-### Priority 1 (Nên làm ngay):
-1. ✅ **Tạo `src/constants/` module** → Merge tất cả mapping dictionaries
-2. ✅ **Refactor crypto module** → Factory pattern thay vì 11 file riêng lẻ
-
-### Priority 2 (Nên làm sớm):
-3. ✅ **Cache byte_counts calculations** → Feature extraction tăng tốc 30%
-4. ✅ **Tách CLI commands** → `src/cli/commands/` 
-5. ✅ **Extract model loader** → Loại bỏ duplicate code
-
-### Priority 3 (Có thể để sau):
-6. ✅ **Config management** → Sử dụng global config instance
-7. ✅ **Metadata schema centralization** → Single source of truth
-8. ✅ **Complete test coverage**
-
----
-
-## THỐNG KÊ
-
-| Loại | Số Lượng | Dòng Mã Dự Kiến Tiết Kiệm |
-|------|----------|--------------------------|
-| Duplicate mapping | 3 | ~100 |
-| Crypto modules | 11 | ~800 |
-| Feature functions | 3 | ~150 |
-| Model loading | 2 | ~50 |
-| Metadata definitions | 3 | ~75 |
-| **TOTAL** | | **~1,175 dòng** |
-
-**Khuyến Nghị**: Có thể giảm codebase xuống **~1,200 dòng** (từ ~2,300) mà không mất functionality
+The next safest cleanup would be to add tests around API response shape, then
+optionally align API prediction with CLI prediction.

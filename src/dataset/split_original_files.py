@@ -3,8 +3,6 @@ Split original files into train/val/test sets
 """
 
 import os
-import shutil
-from pathlib import Path
 from typing import Tuple, List
 import random
 

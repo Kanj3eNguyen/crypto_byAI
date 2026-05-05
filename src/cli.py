@@ -11,63 +11,40 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from pathlib import Path
 
-from src.config import Config
-from src.features.extract_features import extract_features_from_file, extract_features_batch
+from src.features.extract_features import extract_features_batch
 from src.models.train import ModelTrainer
 from src.models.evaluate import ModelEvaluator
 from src.models.predict import (
-    Predictor,
-    certainty_from_prediction,
-    format_prediction_json,
-    infer_prediction_basis,
-    is_encrypted_label,
+    CRYPTO_GROUP_LABELS,
+    LABEL_TO_CRYPTO_GROUP,
     possible_encryption_types_for_label,
     possible_encryption_summary_for_label,
     predict_all,
 )
 
 
-CRYPTO_FAMILY_MAP = {
-    'AES_like': 'block_padded_mode_like',
-    '3DES_like': 'block_padded_mode_like',
-    'Blowfish_like': 'block_padded_mode_like',
-    'DES_like': 'block_padded_mode_like',
-    'RC2_like': 'block_padded_mode_like',
-    'CAST5_like': 'block_padded_mode_like',
-    'ChaCha20_Salsa20_like': 'stream_or_counter_mode_like',
-    'RC4_like': 'stream_or_counter_mode_like',
-    'XOR_like': 'weak_obfuscation_like',
-    'hybrid_AES_RSA_like': 'hybrid_encryption_like',
-    'hybrid_ChaCha20_RSA_like': 'hybrid_encryption_like',
-    'hybrid_Salsa20_RSA_like': 'hybrid_encryption_like',
-    'compressed_only': 'compressed_only',
-    'not_encrypted': 'not_encrypted',
-    'unknown_encrypted': 'unknown_encrypted',
-}
-
-
 CRYPTO_FAMILY_DEFINITIONS = {
-    'block_padded_mode_like': [
-        'AES_like',
-        '3DES_like',
-        'Blowfish_like',
-        'DES_like',
-        'RC2_like',
-        'CAST5_like',
-    ],
-    'stream_or_counter_mode_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
-    'weak_obfuscation_like': ['XOR_like'],
-    'aead_mode_like': ['AES_like'],
-    'hybrid_encryption_like': [
-        'hybrid_AES_RSA_like',
-        'hybrid_ChaCha20_RSA_like',
-        'hybrid_Salsa20_RSA_like',
-    ],
+    key: CRYPTO_GROUP_LABELS[key]
+    for key in (
+        'block_padded_mode_like',
+        'stream_or_counter_mode_like',
+        'weak_obfuscation_like',
+        'aead_mode_like',
+        'hybrid_encryption_like',
+    )
+}
+CRYPTO_FAMILY_DEFINITIONS.update({
     'compressed_only': ['compressed_only'],
     'not_encrypted': ['not_encrypted'],
     'unknown_encrypted': ['unknown_encrypted'],
     'ambiguous': ['ambiguous'],
-}
+})
+CRYPTO_FAMILY_MAP = LABEL_TO_CRYPTO_GROUP
+KNOWN_LABELS = (
+    set(CRYPTO_FAMILY_MAP)
+    | (set(CRYPTO_FAMILY_MAP.values()) - {'weak_obfuscation_like'})
+    | {'aead_mode_like', 'ambiguous'}
+)
 
 
 def add_crypto_family_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -447,31 +424,9 @@ def extract_features(input, output, metadata, block_size, workers):
             df = df.merge(metadata_view, on='__path_key', how='left')
             df = df.drop(columns=['__path_key'])
     elif 'path' in df.columns:
-        known_labels = {
-            'not_encrypted',
-            'compressed_only',
-            'AES_like',
-            'ChaCha20_Salsa20_like',
-            'RC4_like',
-            '3DES_like',
-            'Blowfish_like',
-            'DES_like',
-            'RC2_like',
-            'CAST5_like',
-            'XOR_like',
-            'hybrid_AES_RSA_like',
-            'hybrid_ChaCha20_RSA_like',
-            'hybrid_Salsa20_RSA_like',
-            'unknown_encrypted',
-            'block_padded_mode_like',
-            'stream_or_counter_mode_like',
-            'aead_mode_like',
-            'hybrid_encryption_like',
-            'ambiguous',
-        }
         df['label_group'] = df['path'].apply(
             lambda file_path: Path(file_path).parent.name
-            if Path(file_path).parent.name in known_labels
+            if Path(file_path).parent.name in KNOWN_LABELS
             else None
         )
 
@@ -552,7 +507,7 @@ def train(features, label_column, model_output, report_dir, metadata):
     
     # Train model
     trainer = ModelTrainer(model_type='random_forest')
-    X, y, feature_cols = trainer.prepare_data(df, label_column)
+    X, y, _ = trainer.prepare_data(df, label_column)
     split = df.loc[X.index, 'split'] if 'split' in df.columns else None
     
     click.echo(f"Prepared {len(X)} samples with {X.shape[1]} features")
