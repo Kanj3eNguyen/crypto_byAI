@@ -6,6 +6,8 @@ from typing import Tuple, Dict, Any
 from Crypto.Cipher import ChaCha20
 from Crypto.Random import get_random_bytes
 
+from src.crypto.footer import append_metadata_footer
+
 
 def encrypt_chacha20(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
@@ -25,7 +27,7 @@ def encrypt_chacha20(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str,
     nonce = get_random_bytes(12)  # 96-bit nonce for ChaCha20-IETF
     
     cipher = ChaCha20.new(key=key, nonce=nonce)
-    ciphertext = cipher.encrypt(data)
+    ciphertext = append_metadata_footer(cipher.encrypt(data), nonce, layout="prefix_length")
     
     metadata = {
         'algorithm': 'ChaCha20',

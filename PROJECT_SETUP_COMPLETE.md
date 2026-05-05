@@ -205,7 +205,7 @@ uvicorn src.api.app:app --reload --port 8000
 ## 📦 Features Implemented
 
 ### Encryption Detection
-- ✅ 6 encryption algorithm groups
+- ✅ 15 label groups / 7 broad crypto families
 - ✅ Hybrid encryption (AES+RSA) support
 - ✅ Compressed file detection
 - ✅ Unencrypted file classification

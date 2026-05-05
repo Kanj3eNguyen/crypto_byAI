@@ -6,22 +6,37 @@ import click
 import os
 import json
 import random
+import shutil
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
-import numpy as np
 from pathlib import Path
 
 from src.config import Config
 from src.features.extract_features import extract_features_from_file, extract_features_batch
 from src.models.train import ModelTrainer
 from src.models.evaluate import ModelEvaluator
-from src.models.predict import Predictor, format_prediction_json
+from src.models.predict import (
+    Predictor,
+    certainty_from_prediction,
+    format_prediction_json,
+    infer_prediction_basis,
+    is_encrypted_label,
+)
 
 
 CRYPTO_FAMILY_MAP = {
     'AES_like': 'block_cipher_like',
     '3DES_like': 'block_cipher_like',
+    'Blowfish_like': 'block_cipher_like',
+    'DES_like': 'block_cipher_like',
+    'RC2_like': 'block_cipher_like',
+    'CAST5_like': 'block_cipher_like',
     'ChaCha20_Salsa20_like': 'stream_cipher_like',
     'RC4_like': 'stream_cipher_like',
+    'XOR_like': 'weak_obfuscation_like',
+    'hybrid_AES_RSA_like': 'hybrid_cipher_like',
+    'hybrid_ChaCha20_RSA_like': 'hybrid_cipher_like',
+    'hybrid_Salsa20_RSA_like': 'hybrid_cipher_like',
     'compressed_only': 'compressed_only',
     'not_encrypted': 'not_encrypted',
     'unknown_encrypted': 'unknown_encrypted',
@@ -29,8 +44,21 @@ CRYPTO_FAMILY_MAP = {
 
 
 CRYPTO_FAMILY_DEFINITIONS = {
-    'block_cipher_like': ['AES_like', '3DES_like'],
+    'block_cipher_like': [
+        'AES_like',
+        '3DES_like',
+        'Blowfish_like',
+        'DES_like',
+        'RC2_like',
+        'CAST5_like',
+    ],
     'stream_cipher_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
+    'weak_obfuscation_like': ['XOR_like'],
+    'hybrid_cipher_like': [
+        'hybrid_AES_RSA_like',
+        'hybrid_ChaCha20_RSA_like',
+        'hybrid_Salsa20_RSA_like',
+    ],
     'compressed_only': ['compressed_only'],
     'not_encrypted': ['not_encrypted'],
     'unknown_encrypted': ['unknown_encrypted'],
@@ -71,17 +99,53 @@ def cli():
 @click.option('--output', '-o', default='data/generated', help='Generated sample output directory')
 @click.option('--metadata', '-m', default='data/metadata/dataset.csv', help='Metadata CSV output path')
 @click.option('--limit', type=int, help='Maximum number of original files to process')
+@click.option(
+    '--workers',
+    default=1,
+    show_default=True,
+    type=click.IntRange(min=0),
+    help='Parallel file-generation workers. Use 0 to auto-select.',
+)
 @click.option('--include-hybrid/--skip-hybrid', default=True, help='Include hybrid AES+RSA samples')
-def generate_samples(input, output, metadata, limit, include_hybrid):
+@click.option(
+    '--clean-output/--keep-output',
+    default=False,
+    help='Remove existing generated samples before writing new ones.',
+)
+@click.option(
+    '--profile',
+    type=click.Choice(['group-balanced', 'all-variants']),
+    default='group-balanced',
+    show_default=True,
+    help='Generation profile. Use group-balanced for crypto_family training.',
+)
+def generate_samples(input, output, metadata, limit, workers, include_hybrid, clean_output, profile):
     """Generate labeled encrypted/compressed/plain samples from original files."""
     import gzip
 
     from src.crypto.encrypt_3des import encrypt_3des_cbc
-    from src.crypto.encrypt_aes import encrypt_aes_cbc, encrypt_aes_ctr, encrypt_aes_gcm
+    from src.crypto.encrypt_aes import (
+        encrypt_aes_cbc,
+        encrypt_aes_cfb,
+        encrypt_aes_ctr,
+        encrypt_aes_ecb,
+        encrypt_aes_gcm,
+        encrypt_aes_ofb,
+    )
+    from src.crypto.encrypt_arc2 import encrypt_rc2_cbc
+    from src.crypto.encrypt_blowfish import encrypt_blowfish_cbc
+    from src.crypto.encrypt_cast import encrypt_cast5_cbc
     from src.crypto.encrypt_chacha20 import encrypt_chacha20
-    from src.crypto.encrypt_hybrid import encrypt_hybrid_aes_rsa
+    from src.crypto.encrypt_des import encrypt_des_cbc
+    from src.crypto.encrypt_hybrid import (
+        encrypt_hybrid_aes_rsa,
+        encrypt_hybrid_chacha20_rsa,
+        encrypt_hybrid_salsa20_rsa,
+        warm_hybrid_rsa_key,
+    )
     from src.crypto.encrypt_rc4 import encrypt_rc4
     from src.crypto.encrypt_salsa20 import encrypt_salsa20
+    from src.crypto.encrypt_xor import encrypt_repeating_xor
     from src.dataset.generate_encrypted_samples import EncryptedSampleGenerator
     from src.dataset.split_original_files import split_original_files
 
@@ -96,6 +160,13 @@ def generate_samples(input, output, metadata, limit, include_hybrid):
     if not files:
         raise click.ClickException(f"No files found in: {input}")
 
+    output_path = Path(output)
+    if clean_output and output_path.exists():
+        resolved_output = output_path.resolve()
+        if len(resolved_output.parts) <= 2 or resolved_output == Path.cwd().resolve():
+            raise click.ClickException(f"Refusing to clean unsafe output path: {output}")
+        shutil.rmtree(output_path)
+
     train_files, val_files, test_files = split_original_files(str(input_path))
     split_by_name = {name: 'train' for name in train_files}
     split_by_name.update({name: 'val' for name in val_files})
@@ -104,64 +175,137 @@ def generate_samples(input, output, metadata, limit, include_hybrid):
     gen = EncryptedSampleGenerator(output, metadata)
     skipped = 0
 
-    click.echo(f"Generating samples from {len(files)} original files")
-    with click.progressbar(files, label='Generating') as bar:
-        for file_path in bar:
-            try:
-                data = file_path.read_bytes()
-                original_type = file_path.suffix.lstrip('.').lower() or 'unknown'
-                original_id = file_path.stem
-                split = split_by_name.get(file_path.name, 'train')
+    block_specs = [
+        ('AES_like', encrypt_aes_cbc),
+        ('AES_like', encrypt_aes_ecb),
+        ('AES_like', encrypt_aes_ctr),
+        ('AES_like', encrypt_aes_cfb),
+        ('AES_like', encrypt_aes_ofb),
+        ('AES_like', encrypt_aes_gcm),
+        ('3DES_like', encrypt_3des_cbc),
+        ('Blowfish_like', encrypt_blowfish_cbc),
+        ('DES_like', encrypt_des_cbc),
+        ('RC2_like', encrypt_rc2_cbc),
+        ('CAST5_like', encrypt_cast5_cbc),
+    ]
+    stream_specs = [
+        ('ChaCha20_Salsa20_like', encrypt_chacha20),
+        ('ChaCha20_Salsa20_like', encrypt_salsa20),
+        ('RC4_like', encrypt_rc4),
+    ]
+    weak_specs = [('XOR_like', encrypt_repeating_xor)]
+    hybrid_specs = [
+        ('hybrid_AES_RSA_like', encrypt_hybrid_aes_rsa),
+        ('hybrid_ChaCha20_RSA_like', encrypt_hybrid_chacha20_rsa),
+        ('hybrid_Salsa20_RSA_like', encrypt_hybrid_salsa20_rsa),
+    ]
 
-                def add(label_group, algorithm, mode, key_size, ciphertext):
-                    gen.add_sample(
-                        original_file_path=str(file_path),
-                        original_file_id=original_id,
-                        original_type=original_type,
-                        label_group=label_group,
-                        algorithm=algorithm,
-                        mode=mode,
-                        key_size=key_size,
-                        tool='pycryptodome',
-                        split=split,
-                        ciphertext=ciphertext,
-                    )
+    if workers == 0:
+        workers = max((os.cpu_count() or 2) - 1, 1)
+    if include_hybrid:
+        warm_hybrid_rsa_key()
 
-                add('not_encrypted', 'none', '', 0, data)
-                add('compressed_only', 'gzip', '', 0, gzip.compress(data))
+    def build_records(item):
+        file_index, file_path = item
+        try:
+            data = file_path.read_bytes()
+            original_type = file_path.suffix.lstrip('.').lower() or 'unknown'
+            original_id = file_path.stem
+            split = split_by_name.get(file_path.name, 'train')
+            records = [
+                {
+                    'original_file_path': str(file_path),
+                    'original_file_id': original_id,
+                    'original_type': original_type,
+                    'label_group': 'not_encrypted',
+                    'algorithm': 'none',
+                    'mode': '',
+                    'key_size': 0,
+                    'split': split,
+                    'ciphertext': data,
+                },
+                {
+                    'original_file_path': str(file_path),
+                    'original_file_id': original_id,
+                    'original_type': original_type,
+                    'label_group': 'compressed_only',
+                    'algorithm': 'gzip',
+                    'mode': '',
+                    'key_size': 0,
+                    'split': split,
+                    'ciphertext': gzip.compress(data, compresslevel=1),
+                },
+            ]
 
-                for encryptor in (encrypt_aes_cbc, encrypt_aes_ctr, encrypt_aes_gcm):
-                    ciphertext, meta = encryptor(data)
-                    add('AES_like', meta['algorithm'], meta.get('mode', ''), meta['key_size'], ciphertext)
-
-                for encryptor in (encrypt_chacha20, encrypt_salsa20):
-                    ciphertext, meta = encryptor(data)
-                    add(
-                        'ChaCha20_Salsa20_like',
-                        meta['algorithm'],
-                        meta.get('mode', ''),
-                        meta['key_size'],
-                        ciphertext,
-                    )
-
-                ciphertext, meta = encrypt_rc4(data)
-                add('RC4_like', meta['algorithm'], meta.get('mode', ''), meta['key_size'], ciphertext)
-
-                ciphertext, meta = encrypt_3des_cbc(data)
-                add('3DES_like', meta['algorithm'], meta.get('mode', ''), meta['key_size'], ciphertext)
-
+            if profile == 'all-variants':
+                selected_specs = block_specs + stream_specs + weak_specs
                 if include_hybrid:
-                    ciphertext, meta = encrypt_hybrid_aes_rsa(data)
-                    add(
-                        'hybrid_AES_RSA_like',
-                        meta['algorithm'],
-                        meta.get('mode', ''),
-                        meta['key_size'],
-                        ciphertext,
-                    )
-            except Exception as exc:
-                skipped += 1
-                click.echo(f"Skipped {file_path}: {exc}", err=True)
+                    selected_specs += hybrid_specs
+            else:
+                selected_specs = [
+                    block_specs[file_index % len(block_specs)],
+                    stream_specs[file_index % len(stream_specs)],
+                    weak_specs[file_index % len(weak_specs)],
+                ]
+                if include_hybrid:
+                    selected_specs.append(hybrid_specs[file_index % len(hybrid_specs)])
+
+            for label_group, encryptor in selected_specs:
+                ciphertext, meta = encryptor(data)
+                records.append({
+                    'original_file_path': str(file_path),
+                    'original_file_id': original_id,
+                    'original_type': original_type,
+                    'label_group': label_group,
+                    'algorithm': meta['algorithm'],
+                    'mode': meta.get('mode', ''),
+                    'key_size': meta['key_size'],
+                    'split': split,
+                    'ciphertext': ciphertext,
+                })
+
+            return records, None
+        except Exception as exc:
+            return [], f"Skipped {file_path}: {exc}"
+
+    def add_record(record):
+        label_group = record['label_group']
+        gen.add_sample(
+            original_file_path=record['original_file_path'],
+            original_file_id=record['original_file_id'],
+            original_type=record['original_type'],
+            label_group=label_group,
+            algorithm=record['algorithm'],
+            mode=record['mode'],
+            key_size=record['key_size'],
+            tool='pycryptodome',
+            split=record['split'],
+            ciphertext=record['ciphertext'],
+            crypto_family=CRYPTO_FAMILY_MAP.get(label_group, label_group),
+        )
+
+    click.echo(f"Generating samples from {len(files)} original files")
+    click.echo(f"Generation profile: {profile}")
+    click.echo(f"Workers: {workers}")
+    indexed_files = list(enumerate(files))
+    if workers <= 1 or len(indexed_files) <= 1:
+        record_batches = map(build_records, indexed_files)
+    else:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        record_batches = executor.map(build_records, indexed_files)
+
+    try:
+        with click.progressbar(record_batches, length=len(indexed_files), label='Generating') as bar:
+            for records, error in bar:
+                if error:
+                    skipped += 1
+                    click.echo(error, err=True)
+                    continue
+                for record in records:
+                    add_record(record)
+    finally:
+        if workers > 1 and len(indexed_files) > 1:
+            executor.shutdown(wait=True)
 
     gen.save_metadata()
     click.echo(f"Generated {gen.get_samples_count()} samples")
@@ -305,7 +449,14 @@ def extract_features(input, output, metadata, block_size, workers):
             'ChaCha20_Salsa20_like',
             'RC4_like',
             '3DES_like',
+            'Blowfish_like',
+            'DES_like',
+            'RC2_like',
+            'CAST5_like',
+            'XOR_like',
             'hybrid_AES_RSA_like',
+            'hybrid_ChaCha20_RSA_like',
+            'hybrid_Salsa20_RSA_like',
             'unknown_encrypted',
         }
         df['label_group'] = df['path'].apply(
@@ -460,7 +611,9 @@ def predict(file, model, features):
     file_features = extract_features_from_file(file)
     
     # Prepare feature array
-    feature_array = np.array([[file_features.get(name, 0) for name in trainer.feature_columns]])
+    feature_array = pd.DataFrame([
+        {name: file_features.get(name, 0) for name in trainer.feature_columns}
+    ])
     
     # Predict
     result = predictor.predict_with_confidence(feature_array, top_k=3)
@@ -468,7 +621,8 @@ def predict(file, model, features):
     # Generate evidence
     predicted_class = result['predicted_class']
     confidence = result['confidence']
-    is_encrypted = predicted_class not in ['not_encrypted', 'compressed_only']
+    is_encrypted = is_encrypted_label(predicted_class)
+    basis = infer_prediction_basis(file_features)
     
     evidence = predictor.generate_evidence(file_features, predicted_class, confidence)
     
@@ -484,11 +638,21 @@ def predict(file, model, features):
         features_summary={
             'shannon_entropy_full': file_features.get('shannon_entropy_full', 0),
             'entropy_mean': file_features.get('entropy_mean', 0),
-            'high_entropy_block_ratio': file_features.get('high_entropy_block_ratio_75', 0),
+            'high_entropy_block_ratio': file_features.get('high_entropy_block_ratio', 0),
             'unique_byte_count': file_features.get('unique_byte_count', 0),
-            'printable_byte_ratio': file_features.get('printable_byte_ratio', 0)
+            'printable_byte_ratio': file_features.get('printable_byte_ratio', 0),
+            'footer_metadata_score': file_features.get('footer_metadata_score', 0),
+            'footer_nonce12_tag16_like': file_features.get('footer_nonce12_tag16_like', 0),
+            'footer_nonce24_tag16_like': file_features.get('footer_nonce24_tag16_like', 0),
+            'footer_rsa2048_wrapped_key_like': file_features.get(
+                'footer_rsa2048_wrapped_key_like',
+                0,
+            ),
         },
-        evidence=evidence
+        evidence=evidence,
+        top_groups=result.get('top_groups'),
+        basis=basis,
+        certainty=certainty_from_prediction(is_encrypted, confidence, basis),
     )
     
     # Print output

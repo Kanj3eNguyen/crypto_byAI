@@ -13,11 +13,15 @@ dataset:
 
 encryption:
   # Encryption algorithms to generate
+  generation_profile: "group-balanced"
   algorithms:
     - name: "AES"
       modes:
         - "CBC"
+        - "ECB"
         - "CTR"
+        - "CFB"
+        - "OFB"
         - "GCM"
       key_sizes: [128, 192, 256]
     - name: "ChaCha20"
@@ -32,6 +36,30 @@ encryption:
     - name: "3DES"
       modes: ["CBC"]
       key_sizes: [192]
+    - name: "Blowfish"
+      modes: ["CBC"]
+      key_sizes: [128, 256]
+    - name: "DES"
+      modes: ["CBC"]
+      key_sizes: [56]
+    - name: "RC2"
+      modes: ["CBC"]
+      key_sizes: [128]
+    - name: "CAST5"
+      modes: ["CBC"]
+      key_sizes: [128]
+    - name: "XOR"
+      modes: ["REPEATING_KEY"]
+      key_sizes: [128]
+    - name: "Hybrid_AES_RSA"
+      modes: ["CBC+OAEP"]
+      key_sizes: [256]
+    - name: "Hybrid_ChaCha20_RSA"
+      modes: ["STREAM+OAEP"]
+      key_sizes: [256]
+    - name: "Hybrid_Salsa20_RSA"
+      modes: ["STREAM+OAEP"]
+      key_sizes: [256]
 
 feature_extraction:
   # Block size for entropy calculation
@@ -52,6 +80,7 @@ feature_extraction:
     - unique_bytes
     - magic_bytes
     - header_footer_features
+    - footer_heuristics
 
 model:
   # Model type: random_forest, xgboost, svm, logistic_regression
@@ -102,5 +131,12 @@ labels:
   - ChaCha20_Salsa20_like
   - RC4_like
   - 3DES_like
+  - Blowfish_like
+  - DES_like
+  - RC2_like
+  - CAST5_like
+  - XOR_like
   - hybrid_AES_RSA_like
+  - hybrid_ChaCha20_RSA_like
+  - hybrid_Salsa20_RSA_like
   - unknown_encrypted

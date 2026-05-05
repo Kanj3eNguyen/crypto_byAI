@@ -7,6 +7,8 @@ from Crypto.Cipher import DES3
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad
 
+from src.crypto.footer import append_metadata_footer
+
 
 def encrypt_3des_cbc(data: bytes, key_size: int = 192) -> Tuple[bytes, Dict[str, Any]]:
     """
@@ -26,7 +28,11 @@ def encrypt_3des_cbc(data: bytes, key_size: int = 192) -> Tuple[bytes, Dict[str,
     iv = get_random_bytes(DES3.block_size)
     
     cipher = DES3.new(key, DES3.MODE_CBC, iv)
-    ciphertext = cipher.encrypt(pad(data, DES3.block_size))
+    ciphertext = append_metadata_footer(
+        cipher.encrypt(pad(data, DES3.block_size)),
+        iv,
+        layout="prefix_length",
+    )
     
     metadata = {
         'algorithm': '3DES',

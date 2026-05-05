@@ -6,6 +6,8 @@ from typing import Tuple, Dict, Any
 from Crypto.Cipher import Salsa20
 from Crypto.Random import get_random_bytes
 
+from src.crypto.footer import append_metadata_footer
+
 
 def encrypt_salsa20(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
@@ -25,7 +27,7 @@ def encrypt_salsa20(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
     nonce = get_random_bytes(8)  # 64-bit nonce for Salsa20
     
     cipher = Salsa20.new(key=key, nonce=nonce)
-    ciphertext = cipher.encrypt(data)
+    ciphertext = append_metadata_footer(cipher.encrypt(data), nonce, layout="padded_suffix_length")
     
     metadata = {
         'algorithm': 'Salsa20',

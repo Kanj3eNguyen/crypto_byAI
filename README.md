@@ -37,7 +37,14 @@ AES_like              - Mã hoá bằng AES hoặc block cipher gần AES
 ChaCha20_Salsa20_like - Nhóm stream cipher hiện đại
 RC4_like              - Nhóm stream cipher cũ
 3DES_like             - Block cipher cũ (block size 8 byte)
+Blowfish_like         - Block cipher legacy
+DES_like              - Legacy DES block cipher
+RC2_like              - Legacy RC2 block cipher
+CAST5_like            - Legacy CAST5 block cipher
+XOR_like              - Simple repeating-key XOR obfuscation
 hybrid_AES_RSA_like   - Symmetric key + RSA hybrid encryption
+hybrid_ChaCha20_RSA_like - ChaCha20 + RSA hybrid encryption
+hybrid_Salsa20_RSA_like  - Salsa20 + RSA hybrid encryption
 unknown_encrypted     - Dữ liệu có vẻ mã hoá nhưng không đủ chắc
 ```
 
@@ -151,8 +158,12 @@ python -m src.cli generate-samples `
   --input data/raw/original `
   --output data/generated `
   --metadata data/metadata/dataset.csv `
-  --limit 500 `
+  --limit 100 `
+  --clean-output `
+  --workers 0 `
+  --profile group-balanced `
   --skip-hybrid
+  
 ```
 
 ```powershell
@@ -167,8 +178,10 @@ python -m src.cli build-ransomware-metadata `
 `crypto_family` gop cac nhan chi tiet nhu sau:
 
 ```text
-block_cipher_like  = AES_like + 3DES_like
+block_cipher_like  = AES_like + 3DES_like + Blowfish_like + DES_like + RC2_like + CAST5_like
 stream_cipher_like = ChaCha20_Salsa20_like + RC4_like
+weak_obfuscation_like = XOR_like
+hybrid_cipher_like = hybrid_AES_RSA_like + hybrid_ChaCha20_RSA_like + hybrid_Salsa20_RSA_like
 compressed_only    = compressed_only
 not_encrypted      = not_encrypted
 unknown_encrypted  = unknown_encrypted
@@ -182,8 +195,14 @@ python -m src.cli generate-samples `
   --output data/generated `
   --metadata data/metadata/dataset.csv `
   --limit 1000 `
-  --skip-hybrid
+  --clean-output `
+  --workers 0 `
+  --profile group-balanced
 ```
+
+`group-balanced` sinh so mau can bang theo `crypto_family`, phu hop voi muc tieu du doan nhom.
+Neu muon train nhan chi tiet `label_group`, dung `--profile all-variants`.
+`--workers 0` tu dong dung nhieu worker de gen nhanh hon; dat `--workers 1` neu muon chay tuan tu.
 
 Trich xuat feature:
 
@@ -326,10 +345,13 @@ curl http://localhost:8000/model/info
 
 ## 📈 Đặc Trưng Trích Xuất
 
-Tổng số cột feature hiện tại: **314**
+Tổng số cột feature hiện tại: **386**
 
 - Bao gồm cột metadata/string: `path`, `magic_bytes_hex`, `footer_bytes_hex`
-- Nếu chỉ tính feature số cho mô hình: **311**
+- Nếu chỉ tính feature số cho mô hình: **383**
+- Khi train, model loai bo cac feature de hoc artifact synthetic:
+  `first_byte_value`, `last_byte_value`, `footer_length_marker_value`,
+  va `footer_marker_layout_*`.
 
 ### 1) File basic features
 
@@ -411,6 +433,27 @@ Tổng số cột feature hiện tại: **314**
 - `magic_bytes_hex`
 - `footer_bytes_hex`
 
+### 8) Footer heuristics
+
+- `footer_8_entropy` ... `footer_512_entropy`
+- `footer_8_normalized_entropy` ... `footer_512_normalized_entropy`
+- `footer_8_unique_ratio` ... `footer_512_unique_ratio`
+- `footer_has_length_marker`
+- `footer_marker_layout_suffix`
+- `footer_marker_layout_prefix`
+- `footer_length_marker_value`
+- `footer_length_marker_ratio`
+- `footer_marker_body_entropy`
+- `footer_nonce12_like`
+- `footer_nonce12_tag16_like`
+- `footer_nonce24_tag16_like`
+- `footer_iv8_like`
+- `footer_iv16_or_tag16_like`
+- `footer_rsa2048_wrapped_key_like`
+- `footer_rsa4096_wrapped_key_like`
+- `footer_entropy_delta_vs_body`
+- `footer_metadata_score`
+
 ## 📋 Output Format
 
 ### Dạng JSON từ dự đoán
@@ -421,39 +464,54 @@ Tổng số cột feature hiện tại: **314**
     "path": "samples/suspicious.enc",
     "size_bytes": 245912
   },
-  "classification": {
-    "is_encrypted": true,
-    "predicted_crypto_group": "AES_like",
-    "confidence": 0.82,
-    "top_predictions": [
-      {
-        "label": "AES_like",
-        "confidence": 0.82
-      },
-      {
-        "label": "ChaCha20_Salsa20_like",
-        "confidence": 0.13
-      },
-      {
-        "label": "unknown_encrypted",
-        "confidence": 0.05
-      }
-    ]
-  },
+  "is_encrypted": true,
+  "crypto_group": "stream_cipher_like",
+  "algorithm_guess": "chacha20_salsa20_family",
+  "confidence": 0.78,
+  "certainty": "probable_from_file_statistics_and_footer_heuristics",
+  "basis": [
+    "file_statistics",
+    "footer_heuristics"
+  ],
+  "top_groups": [
+    {
+      "crypto_group": "stream_cipher_like",
+      "confidence": 0.78
+    },
+    {
+      "crypto_group": "block_cipher_like",
+      "confidence": 0.14
+    },
+    {
+      "crypto_group": "hybrid_cipher_like",
+      "confidence": 0.06
+    }
+  ],
+  "top_predictions": [
+    {
+      "label": "ChaCha20_Salsa20_like",
+      "confidence": 0.78
+    },
+    {
+      "label": "AES_like",
+      "confidence": 0.14
+    }
+  ],
   "features_summary": {
     "shannon_entropy_full": 7.91,
     "entropy_mean": 7.88,
     "high_entropy_block_ratio": 0.96,
-    "file_size_mod_16": 0,
-    "printable_byte_ratio": 0.03
+    "printable_byte_ratio": 0.03,
+    "footer_metadata_score": 1.0,
+    "footer_nonce12_tag16_like": 1.0
   },
   "evidence": [
-    "entropy trung bình cao",
-    "96% block có entropy > 7.5",
-    "file size có dấu hiệu phù hợp nhóm block cipher",
-    "byte histogram gần với nhóm AES_like trong tập train"
+    "entropy toan file cao, gan du lieu ngau nhien",
+    "printable byte ratio rat thap",
+    "footer co candidate nonce 12 bytes va authentication tag 16 bytes",
+    "khong thay tin hieu padding/block-size ro cua block cipher"
   ],
-  "warning": "Kết quả là dự đoán xác suất, không khẳng định tuyệt đối thuật toán mã hoá."
+  "warning": "Ket qua la du doan theo nhom thuat toan, khong khang dinh chinh xac thuat toan cu the."
 }
 ```
 
@@ -473,9 +531,9 @@ Các test file:
 ## 📚 Metadata CSV Schema
 
 ```csv
-sample_id,path,label_group,algorithm,mode,key_size,original_file_id,original_type,tool,split,file_size
-000001,data/generated/AES_like/000001.enc,AES_like,AES,CBC,256,orig_0001,pdf,openssl,train,582312
-000002,data/generated/ChaCha20_Salsa20_like/000002.enc,ChaCha20_Salsa20_like,ChaCha20,,256,orig_0002,txt,pycrypto,val,245102
+sample_id,path,label_group,crypto_family,algorithm,mode,key_size,original_file_id,original_type,tool,split,file_size
+000001,data/generated/AES_like/000001.enc,AES_like,block_cipher_like,AES,CBC,256,orig_0001,pdf,openssl,train,582312
+000002,data/generated/ChaCha20_Salsa20_like/000002.enc,ChaCha20_Salsa20_like,stream_cipher_like,ChaCha20,,256,orig_0002,txt,pycrypto,val,245102
 ```
 
 ## 🤖 Model Architecture
@@ -489,9 +547,9 @@ sample_id,path,label_group,algorithm,mode,key_size,original_file_id,original_typ
 
 ### Thống kê Input
 
-- **Features**: 280+ (entropy, byte histogram 256, file structure, etc.)
+- **Features**: 380+ (entropy, byte histogram 256, footer heuristics, file structure, etc.)
 - **Samples**: ~1000+ (tùy vào số file gốc)
-- **Classes**: 8 (encryption groups)
+- **Classes**: 15 label groups, or 7 broad crypto families
 
 ## 📝 Lưu Ý Khi Sử Dụng
 

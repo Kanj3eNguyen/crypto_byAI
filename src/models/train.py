@@ -41,12 +41,16 @@ class ModelTrainer:
     LEAKY_FEATURE_PREFIXES = (
         "filename_",
         "final_extension_",
+        "footer_marker_layout_",
     )
     LEAKY_FEATURE_COLUMNS = {
         "suffix_count",
         "has_double_extension",
         "prior_extension_is_common_original",
         "final_extension_is_common_original",
+        "first_byte_value",
+        "last_byte_value",
+        "footer_length_marker_value",
     }
 
     def __init__(self, model_type: str = "random_forest", random_state: int = 42):

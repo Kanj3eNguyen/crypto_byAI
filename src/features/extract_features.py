@@ -145,6 +145,229 @@ def calculate_segment_features(data: bytes) -> Dict[str, float]:
     return features
 
 
+def _normalized_entropy(data: bytes) -> float:
+    """Calculate entropy scaled to the maximum possible entropy for this length."""
+    data_len = len(data)
+    if data_len <= 1:
+        return 0.0
+
+    max_entropy = float(np.log2(min(data_len, 256)))
+    if max_entropy == 0:
+        return 0.0
+
+    return calculate_entropy(data) / max_entropy
+
+
+def _random_like_segment(data: bytes, min_len: int = 8) -> float:
+    """Return 1.0 when a short segment looks like nonce/tag/key material."""
+    data_len = len(data)
+    if data_len < min_len:
+        return 0.0
+
+    counts = calculate_byte_counts(data)
+    unique_ratio = float(np.count_nonzero(counts) / data_len)
+    max_frequency = float(np.max(counts) / data_len)
+    normalized_entropy = _normalized_entropy(data)
+
+    min_unique_ratio = 0.50 if data_len >= 128 else 0.70
+    if unique_ratio >= min_unique_ratio and normalized_entropy >= 0.75 and max_frequency <= 0.30:
+        return 1.0
+
+    return 0.0
+
+
+def _read_footer_length_marker(data: bytes) -> int:
+    """Read a plausible 4-byte little/big endian footer length marker."""
+    footer_length, _ = _find_footer_marker(data)
+    return footer_length
+
+
+def _plausible_footer_length_values(data_len: int, value: int) -> bool:
+    """Return whether a decoded footer length marker is plausible."""
+    max_footer_size = min(data_len - 4, 4096)
+    common_footer_sizes = {
+        8,
+        12,
+        16,
+        24,
+        28,
+        32,
+        40,
+        264,
+        268,
+        272,
+        276,
+        280,
+        296,
+        512,
+        528,
+        536,
+        552,
+    }
+    return (
+        8 <= value <= max_footer_size
+        and (value in common_footer_sizes or value % 8 == 0 or value % 16 == 0)
+    )
+
+
+def _find_footer_marker(data: bytes):
+    """Find a plausible footer marker at the end or before footer bytes."""
+    if len(data) < 12:
+        return 0, ''
+
+    marker_candidates = [
+        ('suffix_length', len(data) - 4),
+    ]
+    for footer_size in (8, 12, 16, 24, 28, 32, 40, 264, 268, 272, 276, 280, 296):
+        marker_start = len(data) - footer_size - 4
+        if marker_start >= 0:
+            marker_candidates.append(('prefix_length', marker_start))
+
+    for layout, marker_start in marker_candidates:
+        marker = data[marker_start:marker_start + 4]
+        values = [
+            int.from_bytes(marker, byteorder='big', signed=False),
+            int.from_bytes(marker, byteorder='little', signed=False),
+        ]
+        for value in values:
+            if _plausible_footer_length_values(len(data), value):
+                return value, layout
+
+    return 0, ''
+
+
+def calculate_footer_features(data: bytes) -> Dict[str, float]:
+    """Calculate numeric footer heuristics for ransomware-like metadata."""
+    features = {}
+    data_len = len(data)
+    footer_sizes = (8, 12, 16, 24, 28, 32, 40, 64, 128, 256, 512)
+
+    body = data[:-512] if data_len > 512 else data[: data_len // 2]
+    body_entropy = calculate_entropy(body) if body else 0.0
+
+    for size in footer_sizes:
+        segment = data[-size:] if data_len >= size else b''
+        stats = calculate_byte_statistics(segment)
+        features[f'footer_{size}_present'] = 1.0 if segment else 0.0
+        features[f'footer_{size}_entropy'] = calculate_entropy(segment)
+        features[f'footer_{size}_normalized_entropy'] = _normalized_entropy(segment)
+        features[f'footer_{size}_unique_ratio'] = (
+            stats['unique_bytes'] / len(segment) if segment else 0.0
+        )
+        features[f'footer_{size}_printable_ratio'] = stats['printable_ratio']
+
+    footer_length, footer_layout = _find_footer_marker(data)
+    if footer_length and footer_layout == 'suffix_length':
+        footer_body = data[-4 - footer_length:-4]
+    elif footer_length and footer_layout == 'prefix_length':
+        footer_body = data[-footer_length:]
+    else:
+        footer_body = b''
+
+    features['footer_has_length_marker'] = 1.0 if footer_length else 0.0
+    features['footer_marker_layout_suffix'] = 1.0 if footer_layout == 'suffix_length' else 0.0
+    features['footer_marker_layout_prefix'] = 1.0 if footer_layout == 'prefix_length' else 0.0
+    features['footer_length_marker_value'] = float(footer_length)
+    features['footer_length_marker_ratio'] = footer_length / data_len if data_len else 0.0
+    features['footer_marker_body_entropy'] = calculate_entropy(footer_body)
+    features['footer_marker_body_normalized_entropy'] = _normalized_entropy(footer_body)
+
+    features['footer_iv8_like'] = 0.0
+    features['footer_nonce12_like'] = 0.0
+    features['footer_iv16_or_tag16_like'] = 0.0
+    features['footer_nonce24_like'] = 0.0
+
+    if footer_body:
+        if len(footer_body) == 8:
+            features['footer_iv8_like'] = _random_like_segment(footer_body, min_len=8)
+        elif len(footer_body) == 12:
+            features['footer_nonce12_like'] = _random_like_segment(footer_body, min_len=8)
+        elif 16 <= len(footer_body) < 24:
+            features['footer_iv16_or_tag16_like'] = _random_like_segment(
+                footer_body,
+                min_len=12,
+            )
+        elif 24 <= len(footer_body) < 28:
+            features['footer_nonce24_like'] = _random_like_segment(
+                footer_body[:24],
+                min_len=16,
+            )
+        elif 264 <= len(footer_body) < 268:
+            features['footer_iv8_like'] = _random_like_segment(footer_body[:8], min_len=8)
+        elif 268 <= len(footer_body) < 272:
+            features['footer_nonce12_like'] = _random_like_segment(footer_body[:12], min_len=8)
+        elif 272 <= len(footer_body) < 280:
+            features['footer_iv16_or_tag16_like'] = _random_like_segment(
+                footer_body[:16],
+                min_len=12,
+            )
+
+    if 28 <= len(footer_body) < 40:
+        nonce_12 = footer_body[:12]
+        tag_16 = footer_body[12:28]
+        features['footer_nonce12_tag16_like'] = min(
+            _random_like_segment(nonce_12, min_len=8),
+            _random_like_segment(tag_16, min_len=12),
+        )
+    else:
+        features['footer_nonce12_tag16_like'] = 0.0
+
+    if 40 <= len(footer_body) < 56:
+        nonce_24 = footer_body[:24]
+        tag_16 = footer_body[24:40]
+        features['footer_nonce24_tag16_like'] = min(
+            _random_like_segment(nonce_24, min_len=16),
+            _random_like_segment(tag_16, min_len=12),
+        )
+    else:
+        features['footer_nonce24_tag16_like'] = 0.0
+
+    rsa2048_candidates = []
+    rsa4096_candidates = []
+    if len(footer_body) >= 256:
+        rsa2048_candidates.append(footer_body[-256:])
+        for offset in (0, 8, 12, 16, 24):
+            candidate = footer_body[offset:offset + 256]
+            if len(candidate) == 256:
+                rsa2048_candidates.append(candidate)
+    if len(footer_body) >= 512:
+        rsa4096_candidates.append(footer_body[-512:])
+        for offset in (0, 8, 12, 16, 24):
+            candidate = footer_body[offset:offset + 512]
+            if len(candidate) == 512:
+                rsa4096_candidates.append(candidate)
+    features['footer_rsa2048_wrapped_key_like'] = (
+        features['footer_has_length_marker'] *
+        max(
+            (
+                _random_like_segment(candidate, min_len=128)
+                for candidate in rsa2048_candidates
+            ),
+            default=0.0,
+        )
+    )
+    features['footer_rsa4096_wrapped_key_like'] = (
+        features['footer_has_length_marker'] *
+        max(
+            (
+                _random_like_segment(candidate, min_len=256)
+                for candidate in rsa4096_candidates
+            ),
+            default=0.0,
+        )
+    )
+    features['footer_entropy_delta_vs_body'] = features['footer_256_entropy'] - body_entropy
+    features['footer_metadata_score'] = float(
+        features['footer_has_length_marker']
+        + features['footer_nonce12_tag16_like']
+        + features['footer_nonce24_tag16_like']
+        + features['footer_rsa2048_wrapped_key_like']
+        + features['footer_rsa4096_wrapped_key_like']
+    )
+
+    return features
+
+
 def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[str, Any]:
     """
     Extract all features from a single file
@@ -210,6 +433,7 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     # Advanced encrypted-file statistics
     features.update(calculate_advanced_byte_features(data, byte_counts=byte_counts))
     features.update(calculate_segment_features(data))
+    features.update(calculate_footer_features(data))
     
     # File structure
     structure = analyze_file_structure(data, file_path)

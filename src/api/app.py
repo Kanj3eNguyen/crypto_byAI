@@ -6,10 +6,16 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import os
 import tempfile
-import numpy as np
+import pandas as pd
 
 from src.models.train import ModelTrainer
-from src.models.predict import Predictor, format_prediction_json
+from src.models.predict import (
+    Predictor,
+    certainty_from_prediction,
+    format_prediction_json,
+    infer_prediction_basis,
+    is_encrypted_label,
+)
 from src.features.extract_features import extract_features_from_file
 
 app = FastAPI(
@@ -81,14 +87,17 @@ async def predict(file: UploadFile = File(...)):
             
             # Prepare feature array
             feature_names = _model.feature_columns
-            feature_array = np.array([[features.get(name, 0) for name in feature_names]])
+            feature_array = pd.DataFrame([
+                {name: features.get(name, 0) for name in feature_names}
+            ])
             
             # Make prediction
             result = _predictor.predict_with_confidence(feature_array, top_k=3)
             
             # Determine if encrypted
             predicted_class = result['predicted_class']
-            is_encrypted = predicted_class not in ['not_encrypted', 'compressed_only']
+            is_encrypted = is_encrypted_label(predicted_class)
+            basis = infer_prediction_basis(features)
             
             # Generate evidence
             from src.models.predict import Predictor as P
@@ -108,11 +117,21 @@ async def predict(file: UploadFile = File(...)):
                 features_summary={
                     'shannon_entropy_full': features.get('shannon_entropy_full', 0),
                     'entropy_mean': features.get('entropy_mean', 0),
-                    'high_entropy_block_ratio': features.get('high_entropy_block_ratio_75', 0),
+                    'high_entropy_block_ratio': features.get('high_entropy_block_ratio', 0),
                     'unique_byte_count': features.get('unique_byte_count', 0),
-                    'printable_byte_ratio': features.get('printable_byte_ratio', 0)
+                    'printable_byte_ratio': features.get('printable_byte_ratio', 0),
+                    'footer_metadata_score': features.get('footer_metadata_score', 0),
+                    'footer_nonce12_tag16_like': features.get('footer_nonce12_tag16_like', 0),
+                    'footer_nonce24_tag16_like': features.get('footer_nonce24_tag16_like', 0),
+                    'footer_rsa2048_wrapped_key_like': features.get(
+                        'footer_rsa2048_wrapped_key_like',
+                        0,
+                    ),
                 },
-                evidence=evidence
+                evidence=evidence,
+                top_groups=result.get('top_groups'),
+                basis=basis,
+                certainty=certainty_from_prediction(is_encrypted, result['confidence'], basis),
             )
             
             return JSONResponse(content=response)
