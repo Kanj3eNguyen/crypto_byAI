@@ -531,14 +531,38 @@ def predict_all(
     provided.
     """
     from src.models.train import ModelTrainer
+
+    crypto_trainer = ModelTrainer()
+    crypto_trainer.load_model(crypto_model_path)
+
+    ransomware_trainer = None
+    if ransomware_model_path:
+        ransomware_trainer = ModelTrainer()
+        ransomware_trainer.load_model(ransomware_model_path)
+
+    return predict_with_trainers(
+        file_path=file_path,
+        crypto_trainer=crypto_trainer,
+        ransomware_trainer=ransomware_trainer,
+        top_k=top_k,
+    )
+
+
+def predict_with_trainers(
+    file_path: str,
+    crypto_trainer,
+    ransomware_trainer=None,
+    top_k: int = 3,
+    display_path: str = None,
+    file_size: int = None,
+) -> Dict[str, Any]:
+    """Run predictions with already-loaded trainer objects."""
     from src.features.extract_features import extract_features_from_file
 
     # Extract features from file
     features = extract_features_from_file(file_path)
 
     # Prepare crypto predictor
-    crypto_trainer = ModelTrainer()
-    crypto_trainer.load_model(crypto_model_path)
     crypto_predictor = Predictor(crypto_trainer)
 
     feature_array = pd.DataFrame([
@@ -554,11 +578,16 @@ def predict_all(
 
     evidence = crypto_predictor.generate_evidence(features, predicted_class, confidence)
 
-    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+    output_path = display_path or file_path
+    output_size = (
+        file_size
+        if file_size is not None
+        else os.path.getsize(file_path) if os.path.exists(file_path) else 0
+    )
 
     crypto_output = format_prediction_json(
-        file_path=file_path,
-        file_size=file_size,
+        file_path=output_path,
+        file_size=output_size,
         is_encrypted=is_encrypted,
         predicted_class=predicted_class,
         confidence=confidence,
@@ -571,10 +600,8 @@ def predict_all(
     )
 
     ransomware_output = None
-    if ransomware_model_path:
-        # Load ransomware-family model and predict
-        ransomware_trainer = ModelTrainer()
-        ransomware_trainer.load_model(ransomware_model_path)
+    if ransomware_trainer is not None:
+        # Run ransomware-family prediction
         ransomware_predictor = Predictor(ransomware_trainer)
 
         feature_array_r = pd.DataFrame([
@@ -600,3 +627,61 @@ def predict_all(
         'ransomware_family': ransomware_output,
         'features': features,
     }
+
+
+def build_combined_prediction_output(
+    file_path: str,
+    crypto_model_path: str,
+    ransomware_model_path: str,
+    combined: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the merged prediction output used by CLI and web responses."""
+    crypto = combined.get('crypto', {})
+    ransomware = combined.get('ransomware_family')
+    features_summary = crypto.get('features_summary', combined.get('features') or {})
+    top_predictions = crypto.get('top_predictions') or []
+    predicted_class = crypto.get('predicted_class') or crypto.get('predicted_label')
+    if predicted_class is None and top_predictions:
+        predicted_class = top_predictions[0].get('label')
+
+    possible_encryption_types = crypto.get('possible_encryption_types')
+    if possible_encryption_types is None and predicted_class:
+        possible_encryption_types = possible_encryption_types_for_label(predicted_class)
+
+    possible_encryption_summary = crypto.get('possible_encryption_summary')
+    if possible_encryption_summary is None and predicted_class:
+        possible_encryption_summary = possible_encryption_summary_for_label(predicted_class)
+
+    merged = {
+        'file': crypto.get('file', {'path': file_path}),
+        'models': {
+            'crypto_model': crypto_model_path,
+            'ransomware_model': ransomware_model_path if ransomware_model_path else None,
+        },
+        'features_summary': features_summary,
+        'crypto_prediction': {
+            'predicted_label': predicted_class,
+            'predicted_class': predicted_class,
+            'crypto_group': crypto.get('crypto_group'),
+            'crypto_subgroup': crypto.get('crypto_subgroup'),
+            'algorithm_guess': crypto.get('algorithm_guess'),
+            'possible_encryption_types': possible_encryption_types,
+            'possible_encryption_summary': possible_encryption_summary,
+            'confidence': crypto.get('confidence'),
+            'certainty': crypto.get('certainty'),
+            'basis': crypto.get('basis'),
+            'top_predictions': top_predictions,
+            'top_groups': crypto.get('top_groups'),
+            'evidence': crypto.get('evidence'),
+        },
+        'is_encrypted': crypto.get('is_encrypted'),
+    }
+
+    if ransomware is not None:
+        merged['ransomware_prediction'] = {
+            'predicted_family': ransomware.get('predicted_family'),
+            'confidence': ransomware.get('confidence'),
+            'top_predictions': ransomware.get('top_predictions'),
+        }
+
+    return merged

@@ -17,8 +17,7 @@ from src.models.evaluate import ModelEvaluator
 from src.models.predict import (
     CRYPTO_GROUP_LABELS,
     LABEL_TO_CRYPTO_GROUP,
-    possible_encryption_types_for_label,
-    possible_encryption_summary_for_label,
+    build_combined_prediction_output,
     predict_all,
 )
 
@@ -602,53 +601,12 @@ def predict(file, model, ransomware_model, features):
 
 def build_predict_output(file_path, crypto_model_path, ransomware_model_path, combined):
     """Build the merged CLI output for predict."""
-    crypto = combined.get('crypto', {})
-    ransomware = combined.get('ransomware_family')
-    features_summary = crypto.get('features_summary', combined.get('features') or {})
-    top_predictions = crypto.get('top_predictions') or []
-    predicted_class = crypto.get('predicted_class') or crypto.get('predicted_label')
-    if predicted_class is None and top_predictions:
-        predicted_class = top_predictions[0].get('label')
-    possible_encryption_types = crypto.get('possible_encryption_types')
-    if possible_encryption_types is None and predicted_class:
-        possible_encryption_types = possible_encryption_types_for_label(predicted_class)
-    possible_encryption_summary = crypto.get('possible_encryption_summary')
-    if possible_encryption_summary is None and predicted_class:
-        possible_encryption_summary = possible_encryption_summary_for_label(predicted_class)
-
-    merged = {
-        'file': crypto.get('file', {'path': file_path}),
-        'models': {
-            'crypto_model': crypto_model_path,
-            'ransomware_model': ransomware_model_path if ransomware_model_path else None,
-        },
-        'features_summary': features_summary,
-        'crypto_prediction': {
-            'predicted_label': predicted_class,
-            'predicted_class': predicted_class,
-            'crypto_group': crypto.get('crypto_group'),
-            'crypto_subgroup': crypto.get('crypto_subgroup'),
-            'algorithm_guess': crypto.get('algorithm_guess'),
-            'possible_encryption_types': possible_encryption_types,
-            'possible_encryption_summary': possible_encryption_summary,
-            'confidence': crypto.get('confidence'),
-            'certainty': crypto.get('certainty'),
-            'basis': crypto.get('basis'),
-            'top_predictions': top_predictions,
-            'top_groups': crypto.get('top_groups'),
-            'evidence': crypto.get('evidence'),
-        },
-        'is_encrypted': crypto.get('is_encrypted'),
-    }
-
-    if ransomware is not None:
-        merged['ransomware_prediction'] = {
-            'predicted_family': ransomware.get('predicted_family'),
-            'confidence': ransomware.get('confidence'),
-            'top_predictions': ransomware.get('top_predictions'),
-        }
-
-    return merged
+    return build_combined_prediction_output(
+        file_path=file_path,
+        crypto_model_path=crypto_model_path,
+        ransomware_model_path=ransomware_model_path,
+        combined=combined,
+    )
 
 
 @cli.command()

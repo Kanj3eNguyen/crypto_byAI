@@ -415,10 +415,26 @@ features are removed by `ModelTrainer.prepare_data()`.
 
 ## API
 
-Run:
+The API also serves a small web app for batch prediction, model selection, and
+JSON output inspection.
+
+Install API dependencies if they are not already available in your global
+Python:
 
 ```powershell
-uvicorn src.api.app:app --reload --port 8000
+python -m pip install fastapi uvicorn python-multipart
+```
+
+Run with global Python:
+
+```powershell
+python -m uvicorn src.api.app:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/
 ```
 
 Health:
@@ -427,10 +443,27 @@ Health:
 curl http://localhost:8000/health
 ```
 
-Predict:
+List available model artifacts:
+
+```powershell
+curl http://localhost:8000/models
+```
+
+Predict one file with the default loaded crypto model:
 
 ```powershell
 curl -X POST -F "file=@suspicious.enc" http://localhost:8000/predict
+```
+
+Predict multiple files with selected models:
+
+```powershell
+curl -X POST `
+  -F "crypto_model=crypto_family_predictor.pkl" `
+  -F "ransomware_model=ransomware_family_predictor.pkl" `
+  -F "files=@sample1.enc" `
+  -F "files=@sample2.enc" `
+  http://localhost:8000/predict/batch
 ```
 
 Model info:
@@ -439,9 +472,13 @@ Model info:
 curl http://localhost:8000/model/info
 ```
 
-Note: the API currently loads `models/crypto_predictor.pkl` in `src/api/app.py`
-and returns crypto prediction output. The richer dual-model crypto+ransomware
-wrapper is currently implemented in the CLI path.
+The web app and `/predict/batch` endpoint use the same combined output wrapper
+as the CLI. Default artifacts are:
+
+```text
+models/crypto_family_predictor.pkl
+models/ransomware_family_predictor.pkl
+```
 
 ## Tests
 
