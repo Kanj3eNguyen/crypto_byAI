@@ -5,21 +5,23 @@ Model prediction utilities.
 from typing import Any, Dict, List
 
 import numpy as np
+import os
+import pandas as pd
 
 
 LABEL_TO_CRYPTO_GROUP = {
-    'AES_like': 'block_cipher_like',
-    '3DES_like': 'block_cipher_like',
-    'Blowfish_like': 'block_cipher_like',
-    'DES_like': 'block_cipher_like',
-    'RC2_like': 'block_cipher_like',
-    'CAST5_like': 'block_cipher_like',
-    'ChaCha20_Salsa20_like': 'stream_cipher_like',
-    'RC4_like': 'stream_cipher_like',
+    'AES_like': 'block_padded_mode_like',
+    '3DES_like': 'block_padded_mode_like',
+    'Blowfish_like': 'block_padded_mode_like',
+    'DES_like': 'block_padded_mode_like',
+    'RC2_like': 'block_padded_mode_like',
+    'CAST5_like': 'block_padded_mode_like',
+    'ChaCha20_Salsa20_like': 'stream_or_counter_mode_like',
+    'RC4_like': 'stream_or_counter_mode_like',
     'XOR_like': 'weak_obfuscation_like',
-    'hybrid_AES_RSA_like': 'hybrid_cipher_like',
-    'hybrid_ChaCha20_RSA_like': 'hybrid_cipher_like',
-    'hybrid_Salsa20_RSA_like': 'hybrid_cipher_like',
+    'hybrid_AES_RSA_like': 'hybrid_encryption_like',
+    'hybrid_ChaCha20_RSA_like': 'hybrid_encryption_like',
+    'hybrid_Salsa20_RSA_like': 'hybrid_encryption_like',
     'compressed_only': 'compressed_only',
     'not_encrypted': 'not_encrypted',
     'unknown_encrypted': 'unknown_encrypted',
@@ -27,13 +29,106 @@ LABEL_TO_CRYPTO_GROUP = {
 
 
 BROAD_CRYPTO_GROUPS = {
+    'not_encrypted',
+    'compressed_only',
+    'weak_obfuscation_like',
     'block_cipher_like',
     'stream_cipher_like',
     'hybrid_cipher_like',
-    'weak_obfuscation_like',
-    'compressed_only',
-    'not_encrypted',
+    'block_padded_mode_like',
+    'stream_or_counter_mode_like',
+    'aead_mode_like',
+    'hybrid_encryption_like',
     'unknown_encrypted',
+    'ambiguous',
+}
+
+
+AEAD_HINTS = (
+    'footer_nonce12_tag16_like',
+    'footer_nonce24_tag16_like',
+    'footer_iv16_or_tag16_like',
+)
+
+
+LEGACY_LABEL_ALIASES = {
+    'unknown_high_entropy': 'unknown_encrypted',
+}
+
+
+CRYPTO_GROUP_LABELS = {
+    'block_cipher_like': [
+        'AES_like',
+        '3DES_like',
+        'Blowfish_like',
+        'DES_like',
+        'RC2_like',
+        'CAST5_like',
+    ],
+    'block_padded_mode_like': [
+        'AES_like',
+        '3DES_like',
+        'Blowfish_like',
+        'DES_like',
+        'RC2_like',
+        'CAST5_like',
+    ],
+    'stream_cipher_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
+    'stream_or_counter_mode_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
+    'aead_mode_like': ['AES_like'],
+    'hybrid_cipher_like': [
+        'hybrid_AES_RSA_like',
+        'hybrid_ChaCha20_RSA_like',
+        'hybrid_Salsa20_RSA_like',
+    ],
+    'hybrid_encryption_like': [
+        'hybrid_AES_RSA_like',
+        'hybrid_ChaCha20_RSA_like',
+        'hybrid_Salsa20_RSA_like',
+    ],
+    'weak_obfuscation_like': ['XOR_like'],
+}
+
+
+DISPLAY_CRYPTO_GROUP_NAMES = {
+    'block_padded_mode_like': 'block_cipher_like',
+    'stream_or_counter_mode_like': 'stream_cipher_like',
+    'aead_mode_like': 'aead_cipher_like',
+    'hybrid_encryption_like': 'hybrid_cipher_like',
+}
+
+
+LABEL_TO_ALGORITHM_NAMES = {
+    'AES_like': ['AES'],
+    '3DES_like': ['3DES'],
+    'Blowfish_like': ['Blowfish'],
+    'DES_like': ['DES'],
+    'RC2_like': ['RC2'],
+    'CAST5_like': ['CAST5'],
+    'ChaCha20_Salsa20_like': ['ChaCha20', 'Salsa20'],
+    'RC4_like': ['RC4'],
+    'XOR_like': ['XOR'],
+    'hybrid_AES_RSA_like': ['AES+RSA'],
+    'hybrid_ChaCha20_RSA_like': ['ChaCha20+RSA'],
+    'hybrid_Salsa20_RSA_like': ['Salsa20+RSA'],
+    'unknown_encrypted': ['unknown'],
+}
+
+
+LABEL_TO_ENCRYPTION_TYPES = {
+    'AES_like': ['AES-CBC', 'AES-ECB', 'AES-CTR', 'AES-CFB', 'AES-OFB', 'AES-GCM'],
+    '3DES_like': ['3DES-CBC'],
+    'Blowfish_like': ['Blowfish-CBC'],
+    'DES_like': ['DES-CBC'],
+    'RC2_like': ['RC2-CBC'],
+    'CAST5_like': ['CAST5-CBC'],
+    'ChaCha20_Salsa20_like': ['ChaCha20', 'Salsa20'],
+    'RC4_like': ['RC4'],
+    'XOR_like': ['repeating XOR', 'simple custom XOR'],
+    'hybrid_AES_RSA_like': ['AES + RSA wrapped key'],
+    'hybrid_ChaCha20_RSA_like': ['ChaCha20 + RSA wrapped key'],
+    'hybrid_Salsa20_RSA_like': ['Salsa20 + RSA wrapped key'],
+    'unknown_encrypted': ['unknown encryption'],
 }
 
 
@@ -52,24 +147,101 @@ ALGORITHM_GUESS_MAP = {
     'hybrid_Salsa20_RSA_like': 'hybrid_stream_cipher_rsa_like',
     'block_cipher_like': 'block_cipher_family',
     'stream_cipher_like': 'stream_cipher_family',
-    'hybrid_cipher_like': 'hybrid_symmetric_asymmetric_family',
+    'hybrid_cipher_like': 'hybrid_cipher_family',
+    'block_padded_mode_like': 'block_padded_mode_family',
+    'stream_or_counter_mode_like': 'stream_or_counter_mode_family',
+    'aead_mode_like': 'aead_mode_family',
+    'hybrid_encryption_like': 'hybrid_encryption_family',
     'weak_obfuscation_like': 'weak_obfuscation_or_custom_cipher',
     'compressed_only': 'compressed_or_high_entropy_format',
     'not_encrypted': 'not_encrypted',
     'unknown_encrypted': 'unknown_encrypted',
+    'ambiguous': 'ambiguous',
 }
 
 
-def normalize_crypto_group(label: str) -> str:
-    """Map a detailed label to the broad group used as the main prediction."""
+def canonicalize_prediction_label(label: str) -> str:
+    """Return the current output name for a model label."""
+    return LEGACY_LABEL_ALIASES.get(str(label), str(label))
+
+
+def normalize_crypto_group(label: str, features: Dict[str, Any] = None) -> str:
+    """Map a detailed label to the broad crypto_group used as the main prediction."""
+    label = canonicalize_prediction_label(label)
+
     if label in BROAD_CRYPTO_GROUPS:
         return label
-    return LABEL_TO_CRYPTO_GROUP.get(label, 'unknown_encrypted')
+
+    mapped = LABEL_TO_CRYPTO_GROUP.get(label)
+    if mapped is None:
+        return label
+
+    if mapped == 'block_padded_mode_like' and features:
+        if any(float(features.get(key, 0) or 0) > 0 for key in AEAD_HINTS):
+            return 'aead_mode_like'
+    return mapped
+
+
+def normalize_crypto_subgroup(label: str, features: Dict[str, Any] = None) -> str:
+    """Return the most specific leaf label for the prediction."""
+    return normalize_crypto_group(label, features)
 
 
 def algorithm_guess_for_label(label: str) -> str:
     """Return a deliberately broad algorithm-family guess."""
+    label = canonicalize_prediction_label(label)
     return ALGORITHM_GUESS_MAP.get(label, normalize_crypto_group(label))
+
+
+def possible_encryption_types_for_label(label: str) -> List[str]:
+    """Return encryption algorithms/modes that can appear under a model label."""
+    label = canonicalize_prediction_label(label)
+
+    if label in {'not_encrypted', 'compressed_only'}:
+        return []
+
+    member_labels = CRYPTO_GROUP_LABELS.get(label)
+    if member_labels:
+        possible_types = []
+        for member_label in member_labels:
+            possible_types.extend(LABEL_TO_ENCRYPTION_TYPES.get(member_label, [member_label]))
+        return possible_types
+
+    return LABEL_TO_ENCRYPTION_TYPES.get(label, [label])
+
+
+def possible_algorithm_names_for_label(label: str) -> List[str]:
+    """Return compact algorithm names that can appear under a model label."""
+    label = canonicalize_prediction_label(label)
+
+    if label in {'not_encrypted', 'compressed_only'}:
+        return []
+
+    member_labels = CRYPTO_GROUP_LABELS.get(label)
+    if member_labels:
+        possible_names = []
+        for member_label in member_labels:
+            possible_names.extend(LABEL_TO_ALGORITHM_NAMES.get(member_label, [member_label]))
+        return possible_names
+
+    return LABEL_TO_ALGORITHM_NAMES.get(label, [label])
+
+
+def display_crypto_group_for_label(label: str) -> str:
+    """Return the display group name used in compact prediction summaries."""
+    group = normalize_crypto_group(label)
+    return DISPLAY_CRYPTO_GROUP_NAMES.get(group, group)
+
+
+def possible_encryption_summary_for_label(label: str) -> str:
+    """Return a compact summary like block_cipher_like: AES/3DES/DES."""
+    group = display_crypto_group_for_label(label)
+    algorithm_names = possible_algorithm_names_for_label(label)
+
+    if not algorithm_names:
+        return f'{group}: none'
+
+    return f'{group}: {"/".join(algorithm_names)}'
 
 
 def is_encrypted_label(label: str) -> bool:
@@ -77,11 +249,14 @@ def is_encrypted_label(label: str) -> bool:
     return normalize_crypto_group(label) not in {'not_encrypted', 'compressed_only'}
 
 
-def aggregate_top_groups(top_predictions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Aggregate detailed label probabilities into broad crypto groups."""
+def aggregate_top_groups(
+    top_predictions: List[Dict[str, Any]],
+    features: Dict[str, Any] = None,
+) -> List[Dict[str, Any]]:
+    """Aggregate detailed label probabilities into crypto groups."""
     grouped: Dict[str, float] = {}
     for item in top_predictions:
-        group = normalize_crypto_group(item.get('label', 'unknown_encrypted'))
+        group = normalize_crypto_group(item.get('label', 'unknown_encrypted'), features)
         grouped[group] = grouped.get(group, 0.0) + float(item.get('confidence', 0.0))
 
     return [
@@ -131,13 +306,22 @@ class Predictor:
     def predict_with_confidence(self, X: np.ndarray, top_k: int = 3) -> Dict[str, Any]:
         """Make predictions with confidence scores."""
         predictions, probabilities = self.model_trainer.predict(X)
-        class_names = self.model_trainer.label_encoder.classes_
+        class_names = [
+            canonicalize_prediction_label(label)
+            for label in self.model_trainer.label_encoder.classes_
+        ]
 
         top_indices = np.argsort(probabilities[0])[-top_k:][::-1]
         top_predictions = [
             {
                 'label': class_names[idx],
                 'confidence': float(probabilities[0][idx]),
+                'possible_encryption_types': possible_encryption_types_for_label(
+                    class_names[idx],
+                ),
+                'possible_encryption_summary': possible_encryption_summary_for_label(
+                    class_names[idx],
+                ),
             }
             for idx in top_indices
         ]
@@ -152,9 +336,14 @@ class Predictor:
         predicted_class = class_names[predictions[0]]
 
         return {
+            'predicted_label': predicted_class,
             'predicted_class': predicted_class,
             'crypto_group': normalize_crypto_group(predicted_class),
             'algorithm_guess': algorithm_guess_for_label(predicted_class),
+            'possible_encryption_types': possible_encryption_types_for_label(predicted_class),
+            'possible_encryption_summary': possible_encryption_summary_for_label(
+                predicted_class,
+            ),
             'confidence': float(probabilities[0][predictions[0]]),
             'all_probabilities': {
                 class_names[idx]: float(probabilities[0][idx])
@@ -258,8 +447,26 @@ def format_prediction_json(
     certainty: str = None,
 ) -> Dict[str, Any]:
     """Format prediction output as a group-first JSON object."""
-    crypto_group = normalize_crypto_group(predicted_class)
+    predicted_class = canonicalize_prediction_label(predicted_class)
+    top_predictions = [
+        {
+            **item,
+            'label': canonicalize_prediction_label(item.get('label', 'unknown_encrypted')),
+            'possible_encryption_types': possible_encryption_types_for_label(
+                item.get('label', 'unknown_encrypted'),
+            ),
+            'possible_encryption_summary': possible_encryption_summary_for_label(
+                item.get('label', 'unknown_encrypted'),
+            ),
+        }
+        for item in top_predictions
+    ]
+
+    crypto_group = normalize_crypto_group(predicted_class, features_summary)
+    crypto_subgroup = normalize_crypto_subgroup(predicted_class, features_summary)
     algorithm_guess = algorithm_guess_for_label(predicted_class)
+    possible_encryption_types = possible_encryption_types_for_label(predicted_class)
+    possible_encryption_summary = possible_encryption_summary_for_label(predicted_class)
     basis = basis or infer_prediction_basis(features_summary)
     certainty = certainty or certainty_from_prediction(is_encrypted, confidence, basis)
 
@@ -269,12 +476,17 @@ def format_prediction_json(
             'size_bytes': file_size,
         },
         'is_encrypted': is_encrypted,
+        'predicted_label': predicted_class,
+        'predicted_class': predicted_class,
         'crypto_group': crypto_group,
+        'crypto_subgroup': crypto_subgroup,
         'algorithm_guess': algorithm_guess,
+        'possible_encryption_types': possible_encryption_types,
+        'possible_encryption_summary': possible_encryption_summary,
         'confidence': confidence,
         'certainty': certainty,
         'basis': basis,
-        'top_groups': top_groups or aggregate_top_groups(top_predictions),
+        'top_groups': top_groups or aggregate_top_groups(top_predictions, features_summary),
         'top_predictions': top_predictions,
         'features_summary': features_summary,
         'evidence': evidence,
@@ -282,4 +494,101 @@ def format_prediction_json(
             'Ket qua la du doan theo nhom thuat toan, '
             'khong khang dinh chinh xac thuat toan cu the.'
         ),
+    }
+
+
+def predict_all(
+    file_path: str,
+    crypto_model_path: str = 'models/crypto_family_predictor.pkl',
+    ransomware_model_path: str = 'models/ransomware_family_predictor.pkl',
+    top_k: int = 3,
+) -> Dict[str, Any]:
+    """Run both crypto-family and optional ransomware-family predictions for a file.
+
+    Returns a dictionary with keys `crypto` (group-first formatted output) and
+    `ransomware_family` (simple prediction dict) when a ransomware model path is
+    provided.
+    """
+    from src.models.train import ModelTrainer
+    from src.features.extract_features import extract_features_from_file
+
+    # Extract features from file
+    features = extract_features_from_file(file_path)
+
+    # Prepare crypto predictor
+    crypto_trainer = ModelTrainer()
+    crypto_trainer.load_model(crypto_model_path)
+    crypto_predictor = Predictor(crypto_trainer)
+
+    feature_array = pd.DataFrame([
+        {name: features.get(name, 0) for name in crypto_trainer.feature_columns}
+    ])
+
+    crypto_result = crypto_predictor.predict_with_confidence(feature_array, top_k=top_k)
+
+    predicted_class = crypto_result['predicted_class']
+    confidence = crypto_result['confidence']
+    is_encrypted = is_encrypted_label(predicted_class)
+    basis = infer_prediction_basis(features)
+
+    evidence = crypto_predictor.generate_evidence(features, predicted_class, confidence)
+
+    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+
+    crypto_output = format_prediction_json(
+        file_path=file_path,
+        file_size=file_size,
+        is_encrypted=is_encrypted,
+        predicted_class=predicted_class,
+        confidence=confidence,
+        top_predictions=crypto_result['top_predictions'],
+        features_summary={
+            'shannon_entropy_full': features.get('shannon_entropy_full', 0),
+            'entropy_mean': features.get('entropy_mean', 0),
+            'high_entropy_block_ratio': features.get('high_entropy_block_ratio', 0),
+            'unique_byte_count': features.get('unique_byte_count', 0),
+            'printable_byte_ratio': features.get('printable_byte_ratio', 0),
+            'footer_metadata_score': features.get('footer_metadata_score', 0),
+            'footer_nonce12_tag16_like': features.get('footer_nonce12_tag16_like', 0),
+            'footer_nonce24_tag16_like': features.get('footer_nonce24_tag16_like', 0),
+            'footer_rsa2048_wrapped_key_like': features.get(
+                'footer_rsa2048_wrapped_key_like',
+                0,
+            ),
+        },
+        evidence=evidence,
+        top_groups=crypto_result.get('top_groups'),
+        basis=basis,
+        certainty=certainty_from_prediction(is_encrypted, confidence, basis),
+    )
+
+    ransomware_output = None
+    if ransomware_model_path:
+        # Load ransomware-family model and predict
+        ransomware_trainer = ModelTrainer()
+        ransomware_trainer.load_model(ransomware_model_path)
+        ransomware_predictor = Predictor(ransomware_trainer)
+
+        feature_array_r = pd.DataFrame([
+            {name: features.get(name, 0) for name in ransomware_trainer.feature_columns}
+        ])
+
+        r_result = ransomware_predictor.predict_with_confidence(feature_array_r, top_k=top_k)
+
+        ransomware_output = {
+            'predicted_family': r_result['predicted_class'],
+            'confidence': r_result['confidence'],
+            'top_predictions': [
+                {
+                    'label': item.get('label'),
+                    'confidence': item.get('confidence'),
+                }
+                for item in r_result['top_predictions']
+            ],
+        }
+
+    return {
+        'crypto': crypto_output,
+        'ransomware_family': ransomware_output,
+        'features': features,
     }

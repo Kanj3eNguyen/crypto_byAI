@@ -21,22 +21,25 @@ from src.models.predict import (
     format_prediction_json,
     infer_prediction_basis,
     is_encrypted_label,
+    possible_encryption_types_for_label,
+    possible_encryption_summary_for_label,
+    predict_all,
 )
 
 
 CRYPTO_FAMILY_MAP = {
-    'AES_like': 'block_cipher_like',
-    '3DES_like': 'block_cipher_like',
-    'Blowfish_like': 'block_cipher_like',
-    'DES_like': 'block_cipher_like',
-    'RC2_like': 'block_cipher_like',
-    'CAST5_like': 'block_cipher_like',
-    'ChaCha20_Salsa20_like': 'stream_cipher_like',
-    'RC4_like': 'stream_cipher_like',
+    'AES_like': 'block_padded_mode_like',
+    '3DES_like': 'block_padded_mode_like',
+    'Blowfish_like': 'block_padded_mode_like',
+    'DES_like': 'block_padded_mode_like',
+    'RC2_like': 'block_padded_mode_like',
+    'CAST5_like': 'block_padded_mode_like',
+    'ChaCha20_Salsa20_like': 'stream_or_counter_mode_like',
+    'RC4_like': 'stream_or_counter_mode_like',
     'XOR_like': 'weak_obfuscation_like',
-    'hybrid_AES_RSA_like': 'hybrid_cipher_like',
-    'hybrid_ChaCha20_RSA_like': 'hybrid_cipher_like',
-    'hybrid_Salsa20_RSA_like': 'hybrid_cipher_like',
+    'hybrid_AES_RSA_like': 'hybrid_encryption_like',
+    'hybrid_ChaCha20_RSA_like': 'hybrid_encryption_like',
+    'hybrid_Salsa20_RSA_like': 'hybrid_encryption_like',
     'compressed_only': 'compressed_only',
     'not_encrypted': 'not_encrypted',
     'unknown_encrypted': 'unknown_encrypted',
@@ -44,7 +47,7 @@ CRYPTO_FAMILY_MAP = {
 
 
 CRYPTO_FAMILY_DEFINITIONS = {
-    'block_cipher_like': [
+    'block_padded_mode_like': [
         'AES_like',
         '3DES_like',
         'Blowfish_like',
@@ -52,9 +55,10 @@ CRYPTO_FAMILY_DEFINITIONS = {
         'RC2_like',
         'CAST5_like',
     ],
-    'stream_cipher_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
+    'stream_or_counter_mode_like': ['ChaCha20_Salsa20_like', 'RC4_like'],
     'weak_obfuscation_like': ['XOR_like'],
-    'hybrid_cipher_like': [
+    'aead_mode_like': ['AES_like'],
+    'hybrid_encryption_like': [
         'hybrid_AES_RSA_like',
         'hybrid_ChaCha20_RSA_like',
         'hybrid_Salsa20_RSA_like',
@@ -62,6 +66,7 @@ CRYPTO_FAMILY_DEFINITIONS = {
     'compressed_only': ['compressed_only'],
     'not_encrypted': ['not_encrypted'],
     'unknown_encrypted': ['unknown_encrypted'],
+    'ambiguous': ['ambiguous'],
 }
 
 
@@ -401,7 +406,7 @@ def build_ransomware_metadata(
 def extract_features(input, output, metadata, block_size, workers):
     """Extract features from files"""
     click.echo(f"Extracting features from: {input}")
-    
+
     # Get list of files
     if os.path.isfile(input):
         files = [input]
@@ -413,12 +418,12 @@ def extract_features(input, output, metadata, block_size, workers):
                 if filename.startswith('.'):
                     continue
                 files.append(os.path.join(root, filename))
-    
+
     click.echo(f"Found {len(files)} files")
-    
+
     # Extract features
     df = extract_features_batch(files, block_size=block_size, workers=workers, verbose=True)
-    
+
     # Add labels from metadata if provided
     if metadata and os.path.exists(metadata):
         meta_df = pd.read_csv(metadata)
@@ -458,6 +463,11 @@ def extract_features(input, output, metadata, block_size, workers):
             'hybrid_ChaCha20_RSA_like',
             'hybrid_Salsa20_RSA_like',
             'unknown_encrypted',
+            'block_padded_mode_like',
+            'stream_or_counter_mode_like',
+            'aead_mode_like',
+            'hybrid_encryption_like',
+            'ambiguous',
         }
         df['label_group'] = df['path'].apply(
             lambda file_path: Path(file_path).parent.name
@@ -591,78 +601,99 @@ def train(features, label_column, model_output, report_dir, metadata):
 
 @cli.command()
 @click.option('--file', '-f', required=True, help='File to predict')
-@click.option('--model', '-m', default='models/crypto_predictor.pkl', help='Model path')
+@click.option('--model', '-m', default='models/crypto_family_predictor.pkl', help='Crypto-family model path')
+@click.option('--ransomware-model', '-r', default='models/ransomware_family_predictor.pkl', help='Optional ransomware-family model path')
 @click.option('--features', help='Optionally save extracted features')
-def predict(file, model, features):
-    """Predict encryption algorithm for a file"""
-    
-    # Check if model exists
+def predict(file, model, ransomware_model, features):
+    """Predict encryption algorithm for a file (crypto + optional ransomware family)"""
+
+    # Check crypto model exists
     if not os.path.exists(model):
-        click.echo(f"ERROR: Model not found at {model}")
+        click.echo(f"ERROR: Crypto model not found at {model}")
         return
-    
-    # Load model
-    trainer = ModelTrainer()
-    trainer.load_model(model)
-    predictor = Predictor(trainer)
-    
-    # Extract features
+
+    # Warn if ransomware model not present, but continue with crypto
+    if ransomware_model and not os.path.exists(ransomware_model):
+        click.echo(f"WARNING: Ransomware model not found at {ransomware_model}; skipping ransomware prediction")
+        ransomware_model = None
+
     click.echo(f"Analyzing file: {file}")
-    file_features = extract_features_from_file(file)
-    
-    # Prepare feature array
-    feature_array = pd.DataFrame([
-        {name: file_features.get(name, 0) for name in trainer.feature_columns}
-    ])
-    
-    # Predict
-    result = predictor.predict_with_confidence(feature_array, top_k=3)
-    
-    # Generate evidence
-    predicted_class = result['predicted_class']
-    confidence = result['confidence']
-    is_encrypted = is_encrypted_label(predicted_class)
-    basis = infer_prediction_basis(file_features)
-    
-    evidence = predictor.generate_evidence(file_features, predicted_class, confidence)
-    
-    # Format output
-    file_size = os.path.getsize(file)
-    output = format_prediction_json(
+
+    combined = predict_all(
         file_path=file,
-        file_size=file_size,
-        is_encrypted=is_encrypted,
-        predicted_class=predicted_class,
-        confidence=confidence,
-        top_predictions=result['top_predictions'],
-        features_summary={
-            'shannon_entropy_full': file_features.get('shannon_entropy_full', 0),
-            'entropy_mean': file_features.get('entropy_mean', 0),
-            'high_entropy_block_ratio': file_features.get('high_entropy_block_ratio', 0),
-            'unique_byte_count': file_features.get('unique_byte_count', 0),
-            'printable_byte_ratio': file_features.get('printable_byte_ratio', 0),
-            'footer_metadata_score': file_features.get('footer_metadata_score', 0),
-            'footer_nonce12_tag16_like': file_features.get('footer_nonce12_tag16_like', 0),
-            'footer_nonce24_tag16_like': file_features.get('footer_nonce24_tag16_like', 0),
-            'footer_rsa2048_wrapped_key_like': file_features.get(
-                'footer_rsa2048_wrapped_key_like',
-                0,
-            ),
-        },
-        evidence=evidence,
-        top_groups=result.get('top_groups'),
-        basis=basis,
-        certainty=certainty_from_prediction(is_encrypted, confidence, basis),
+        crypto_model_path=model,
+        ransomware_model_path=ransomware_model,
+        top_k=3,
     )
-    
-    # Print output
-    click.echo(json.dumps(output, indent=2, ensure_ascii=False))
-    
+
+    click.echo(json.dumps(
+        build_predict_output(
+            file_path=file,
+            crypto_model_path=model,
+            ransomware_model_path=ransomware_model,
+            combined=combined,
+        ),
+        indent=2,
+        ensure_ascii=False,
+    ))
+
     # Optionally save features
-    if features:
-        with open(features, 'w') as f:
-            json.dump(file_features, f, indent=2, ensure_ascii=False)
-        click.echo(f"Features saved to: {features}")
+    features_path = features
+    if features_path and combined.get('features') is not None:
+        with open(features_path, 'w', encoding='utf-8') as f:
+            json.dump(combined['features'], f, indent=2, ensure_ascii=False)
+        click.echo(f"Features saved to: {features_path}")
+
+
+def build_predict_output(file_path, crypto_model_path, ransomware_model_path, combined):
+    """Build the merged CLI output for predict."""
+    crypto = combined.get('crypto', {})
+    ransomware = combined.get('ransomware_family')
+    features_summary = crypto.get('features_summary', combined.get('features') or {})
+    top_predictions = crypto.get('top_predictions') or []
+    predicted_class = crypto.get('predicted_class') or crypto.get('predicted_label')
+    if predicted_class is None and top_predictions:
+        predicted_class = top_predictions[0].get('label')
+    possible_encryption_types = crypto.get('possible_encryption_types')
+    if possible_encryption_types is None and predicted_class:
+        possible_encryption_types = possible_encryption_types_for_label(predicted_class)
+    possible_encryption_summary = crypto.get('possible_encryption_summary')
+    if possible_encryption_summary is None and predicted_class:
+        possible_encryption_summary = possible_encryption_summary_for_label(predicted_class)
+
+    merged = {
+        'file': crypto.get('file', {'path': file_path}),
+        'models': {
+            'crypto_model': crypto_model_path,
+            'ransomware_model': ransomware_model_path if ransomware_model_path else None,
+        },
+        'features_summary': features_summary,
+        'crypto_prediction': {
+            'predicted_label': predicted_class,
+            'predicted_class': predicted_class,
+            'crypto_group': crypto.get('crypto_group'),
+            'crypto_subgroup': crypto.get('crypto_subgroup'),
+            'algorithm_guess': crypto.get('algorithm_guess'),
+            'possible_encryption_types': possible_encryption_types,
+            'possible_encryption_summary': possible_encryption_summary,
+            'confidence': crypto.get('confidence'),
+            'certainty': crypto.get('certainty'),
+            'basis': crypto.get('basis'),
+            'top_predictions': top_predictions,
+            'top_groups': crypto.get('top_groups'),
+            'evidence': crypto.get('evidence'),
+        },
+        'is_encrypted': crypto.get('is_encrypted'),
+    }
+
+    if ransomware is not None:
+        merged['ransomware_prediction'] = {
+            'predicted_family': ransomware.get('predicted_family'),
+            'confidence': ransomware.get('confidence'),
+            'top_predictions': ransomware.get('top_predictions'),
+        }
+
+    return merged
 
 
 @cli.command()
