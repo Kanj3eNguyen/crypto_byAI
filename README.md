@@ -326,29 +326,90 @@ curl http://localhost:8000/model/info
 
 ## 📈 Đặc Trưng Trích Xuất
 
-### Entropy Features
+Tổng số cột feature hiện tại: **314**
 
-- `shannon_entropy_full` - Shannon entropy của toàn bộ file
-- `entropy_mean` - Entropy trung bình của các block
-- `entropy_std` - Độ lệch chuẩn entropy
-- `entropy_min`, `entropy_max`, `entropy_median` - Min/max/median entropy
-- `high_entropy_block_ratio_75` - % block có entropy > 7.5
-- `high_entropy_block_ratio_78` - % block có entropy > 7.8
+- Bao gồm cột metadata/string: `path`, `magic_bytes_hex`, `footer_bytes_hex`
+- Nếu chỉ tính feature số cho mô hình: **311**
 
-### Byte Statistics
+### 1) File basic features
 
-- `unique_byte_count` - Số byte value unique (0-256)
-- `printable_byte_ratio` - % byte là ký tự in được (ASCII 32-126)
-- `null_byte_ratio` - % null byte (0x00)
-- `byte_*_freq` (256 features) - Tần suất từng byte value (0-255)
+- `path`
+- `file_size`
+- `file_size_mod_8`
+- `file_size_mod_16`
+- `file_size_mod_256`
 
-### File Structure
+### 2) Entropy (full + block)
 
-- `file_size`, `file_size_mod_8`, `file_size_mod_16`, `file_size_mod_256`
-- `magic_bytes_hex` - Magic bytes header
-- `identified_format` - Định dạng file được phát hiện
-- `has_known_signature` - Có file signature đã biết hay không
-- Header/footer entropy features
+- `shannon_entropy_full`
+- `entropy_mean`
+- `entropy_std`
+- `entropy_min`
+- `entropy_max`
+- `entropy_median`
+- `entropy_first_block`
+- `entropy_last_block`
+- `high_entropy_block_ratio`
+- `very_high_entropy_block_ratio`
+
+### 3) Byte statistics
+
+- `unique_byte_count`
+- `printable_byte_ratio`
+- `null_byte_ratio`
+- `byte_mean`
+- `byte_std`
+- `byte_min`
+- `byte_max`
+- `byte_median`
+
+### 4) Byte histogram (256 features)
+
+- `byte_0_freq` ... `byte_255_freq`
+
+### 5) Advanced byte features
+
+- `byte_chi_square_uniformity`
+- `byte_serial_correlation`
+- `adjacent_equal_byte_ratio`
+- `adjacent_abs_diff_mean`
+- `adjacent_abs_diff_std`
+- `adjacent_xor_mean`
+- `unique_bigram_ratio`
+- `run_count_ratio`
+- `longest_byte_run`
+- `mean_byte_run_length`
+
+### 6) Segment features
+
+- `first_256_entropy`
+- `first_256_printable_ratio`
+- `first_256_null_byte_ratio`
+- `first_256_unique_byte_count`
+- `first_1024_entropy`
+- `first_1024_printable_ratio`
+- `first_1024_null_byte_ratio`
+- `first_1024_unique_byte_count`
+- `last_256_entropy`
+- `last_256_printable_ratio`
+- `last_256_null_byte_ratio`
+- `last_256_unique_byte_count`
+- `last_1024_entropy`
+- `last_1024_printable_ratio`
+- `last_1024_null_byte_ratio`
+- `last_1024_unique_byte_count`
+- `middle_1024_entropy`
+- `middle_1024_printable_ratio`
+- `middle_1024_null_byte_ratio`
+- `middle_1024_unique_byte_count`
+- `first_byte_value`
+- `last_byte_value`
+
+### 7) File structure and raw signatures
+
+- `has_known_signature`
+- `magic_bytes_hex`
+- `footer_bytes_hex`
 
 ## 📋 Output Format
 
