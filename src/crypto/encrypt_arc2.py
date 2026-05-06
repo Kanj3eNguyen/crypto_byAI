@@ -1,5 +1,5 @@
 """
-RC2/ARC2 encryption utilities.
+Hàm tạo mẫu mã hóa RC2/ARC2.
 """
 
 from typing import Any, Dict, Tuple
@@ -13,14 +13,14 @@ from src.crypto.footer import append_metadata_footer
 
 def encrypt_rc2_cbc(data: bytes, key_size: int = 128) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using RC2-CBC.
+    Mã hóa dữ liệu bằng RC2-CBC.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (40 to 1024, multiple of 8)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, từ 40 đến 1024 và chia hết cho 8.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     if key_size < 40 or key_size > 1024 or key_size % 8 != 0:
         raise ValueError("RC2 key_size must be 40..1024 bits and divisible by 8")

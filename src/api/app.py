@@ -1,5 +1,5 @@
 """
-FastAPI application for ransomware encryption prediction
+Ứng dụng FastAPI cho chức năng dự đoán mã hóa ransomware.
 """
 
 from typing import List, Optional
@@ -25,11 +25,11 @@ from src.features.extract_features import extract_features_from_file
 
 app = FastAPI(
     title="Ransomware Crypto Predictor",
-    description="AI-based prediction of ransomware encryption algorithm groups",
+    description="Dự đoán nhóm mã hóa và họ ransomware từ đặc trưng tệp",
     version="0.1.0"
 )
 
-# Global model and predictor
+# Mô hình và predictor dùng cho endpoint đơn tệp.
 _model = None
 _predictor = None
 MODELS_DIR = "models"
@@ -270,8 +270,8 @@ WEB_APP_HTML = """
           <input id="files" name="files" type="file" multiple required>
 
           <div class="actions">
-            <button class="primary" id="runButton" type="submit">Run Predict</button>
-            <button class="secondary" id="clearButton" type="button">Clear</button>
+            <button class="primary" id="runButton" type="submit">Dự đoán</button>
+            <button class="secondary" id="clearButton" type="button">Xóa</button>
           </div>
           <div class="status" id="status">Loading models...</div>
         </form>
@@ -489,7 +489,7 @@ WEB_APP_HTML = """
 
 
 def load_model():
-    """Load pretrained model"""
+    """Nạp mô hình mặc định đã huấn luyện."""
     global _model, _predictor
     
     model_path = os.path.join(MODELS_DIR, DEFAULT_CRYPTO_MODEL)
@@ -503,7 +503,7 @@ def load_model():
 
 
 def list_model_files() -> List[str]:
-    """Return available model artifact filenames."""
+    """Liệt kê các file mô hình có thể chọn."""
     if not os.path.isdir(MODELS_DIR):
         return []
 
@@ -516,12 +516,12 @@ def list_model_files() -> List[str]:
 
 
 def default_model_name(name: str) -> str:
-    """Return the default model name if it exists."""
+    """Trả về tên mô hình mặc định nếu file tồn tại."""
     return name if name in list_model_files() else ""
 
 
 def resolve_model_path(model_name: str, required: bool = True) -> Optional[str]:
-    """Resolve a selected model filename to a path under the models directory."""
+    """Đổi tên mô hình được chọn thành đường dẫn trong thư mục models."""
     if not model_name:
         if required:
             raise HTTPException(status_code=400, detail="Model selection is required")
@@ -544,7 +544,7 @@ async def predict_upload(
     crypto_model_path: str,
     ransomware_model_path: Optional[str],
 ) -> dict:
-    """Predict one uploaded file and return the merged output."""
+    """Dự đoán một file upload và trả về output gộp."""
     contents = await file.read()
     suffix = os.path.splitext(file.filename or "")[1]
 
@@ -575,7 +575,7 @@ async def predict_upload(
 
 @app.on_event("startup")
 async def startup_event():
-    """Load model on startup"""
+    """Nạp mô hình khi ứng dụng khởi động."""
     try:
         load_model()
     except Exception as e:
@@ -584,13 +584,13 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def web_app():
-    """Serve the batch prediction web app."""
+    """Trả về giao diện web dự đoán nhiều tệp."""
     return HTMLResponse(content=WEB_APP_HTML)
 
 
 @app.get("/models")
 async def available_models():
-    """Return selectable model artifacts."""
+    """Trả về danh sách mô hình có thể chọn."""
     models = list_model_files()
     return {
         "models": models,
@@ -601,7 +601,7 @@ async def available_models():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Endpoint kiểm tra trạng thái."""
     return {"status": "ok", "model_loaded": _model is not None}
 
 
@@ -611,7 +611,7 @@ async def predict_batch(
     crypto_model: str = Form(DEFAULT_CRYPTO_MODEL),
     ransomware_model: str = Form(DEFAULT_RANSOMWARE_MODEL),
 ):
-    """Predict multiple uploaded files with selected models."""
+    """Dự đoán nhiều file upload bằng mô hình đã chọn."""
     if not files:
         raise HTTPException(status_code=400, detail="At least one file is required")
 
@@ -658,52 +658,52 @@ async def predict_batch(
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     """
-    Predict encryption algorithm group for uploaded file
-    
+    Dự đoán nhóm mã hóa cho file upload.
+
     Args:
-        file: Uploaded file to analyze
-    
+        file: File cần phân tích.
+
     Returns:
-        JSON prediction with confidence and evidence
+        JSON gồm kết quả dự đoán, confidence và bằng chứng.
     """
     if _model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
     try:
-        # Read uploaded file
+        # Đọc file upload.
         contents = await file.read()
         
-        # Create temporary file
+        # Ghi ra file tạm để dùng chung hàm trích xuất đặc trưng.
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(contents)
             tmp_path = tmp.name
         
         try:
-            # Extract features
+            # Trích xuất đặc trưng.
             features = extract_features_from_file(tmp_path)
             
-            # Prepare feature array
+            # Chuẩn bị mảng đặc trưng theo đúng thứ tự lúc huấn luyện.
             feature_names = _model.feature_columns
             feature_array = pd.DataFrame([
                 {name: features.get(name, 0) for name in feature_names}
             ])
             
-            # Make prediction
+            # Chạy dự đoán.
             result = _predictor.predict_with_confidence(feature_array, top_k=3)
             
-            # Determine if encrypted
+            # Xác định nhãn dự đoán có thuộc nhóm mã hóa hay không.
             predicted_class = result['predicted_class']
             is_encrypted = is_encrypted_label(predicted_class)
             basis = infer_prediction_basis(features)
             
-            # Generate evidence
+            # Tạo phần bằng chứng giải thích.
             evidence = _predictor.generate_evidence(
                 features,
                 predicted_class,
                 result['confidence'],
             )
             
-            # Format response
+            # Định dạng response.
             response = format_prediction_json(
                 file_path=file.filename,
                 file_size=len(contents),
@@ -721,7 +721,7 @@ async def predict(file: UploadFile = File(...)):
             return JSONResponse(content=response)
         
         finally:
-            # Clean up temp file
+            # Xóa file tạm.
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
     
@@ -731,7 +731,7 @@ async def predict(file: UploadFile = File(...)):
 
 @app.get("/model/info")
 async def model_info():
-    """Get information about loaded model"""
+    """Trả về thông tin mô hình đang nạp."""
     if _model is None:
         return {"status": "Model not loaded"}
     

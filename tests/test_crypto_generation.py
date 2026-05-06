@@ -1,5 +1,5 @@
 """
-Tests for synthetic crypto sample generation.
+Kiểm thử phần sinh mẫu mã hóa tổng hợp.
 """
 
 import csv

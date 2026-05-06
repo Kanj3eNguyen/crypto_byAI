@@ -1,5 +1,5 @@
 """
-Helpers for ransomware-like metadata footers.
+Hàm hỗ trợ tạo footer metadata kiểu ransomware.
 """
 
 from Crypto.Random import get_random_bytes
@@ -10,7 +10,7 @@ def append_metadata_footer(
     footer_body: bytes,
     layout: str = "suffix_length",
 ) -> bytes:
-    """Append footer metadata using one of several ransomware-like layouts."""
+    """Gắn metadata footer theo một trong các bố cục mô phỏng ransomware."""
     if not footer_body:
         return ciphertext
 
@@ -20,8 +20,8 @@ def append_metadata_footer(
     if layout == "prefix_length":
         return ciphertext + footer_length + footer_body
     if layout == "padded_suffix_length":
-        # Pad to a plausible boundary so the footer is detectable without
-        # making the final byte uniquely identify the original metadata size.
+        # Đệm tới biên hợp lý để footer vẫn nhận diện được mà byte cuối không
+        # làm lộ trực tiếp kích thước metadata ban đầu.
         pad_len = 8 - (len(footer_body) % 8)
         if pad_len == 0:
             pad_len = 8

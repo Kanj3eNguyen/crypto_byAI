@@ -1,5 +1,5 @@
 """
-Configuration module for loading and managing project settings
+Nạp và quản lý cấu hình của dự án.
 """
 
 import os
@@ -8,14 +8,14 @@ from typing import Dict, Any
 
 
 class Config:
-    """Configuration manager for the project"""
+    """Lớp quản lý cấu hình."""
     
     def __init__(self, config_file: str = None):
         """
-        Initialize configuration from YAML file
-        
+        Khởi tạo cấu hình từ file YAML.
+
         Args:
-            config_file: Path to YAML config file. If None, uses default.yaml
+            config_file: Đường dẫn file YAML. Nếu không truyền, dùng default.yaml.
         """
         if config_file is None:
             config_file = os.path.join(
@@ -29,7 +29,7 @@ class Config:
         self.config = self._load_config()
     
     def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from YAML file"""
+        """Đọc cấu hình từ file YAML."""
         if not os.path.exists(self.config_file):
             raise FileNotFoundError(f"Config file not found: {self.config_file}")
         
@@ -37,7 +37,7 @@ class Config:
             return yaml.safe_load(f)
     
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value by key using dot notation"""
+        """Lấy giá trị cấu hình bằng khóa dạng dấu chấm."""
         keys = key.split('.')
         value = self.config
         
@@ -50,18 +50,18 @@ class Config:
         return value
     
     def __getitem__(self, key: str):
-        """Dictionary-style access"""
+        """Cho phép truy cập cấu hình theo kiểu dictionary."""
         return self.config[key]
     
     def __repr__(self):
         return f"Config(file={self.config_file})"
 
 
-# Global config instance
+# Thể hiện cấu hình dùng chung.
 _config = None
 
 def get_config(config_file: str = None) -> Config:
-    """Get or create global config instance"""
+    """Lấy hoặc tạo thể hiện cấu hình dùng chung."""
     global _config
     if _config is None:
         _config = Config(config_file)

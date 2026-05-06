@@ -1,5 +1,5 @@
 """
-Blowfish encryption utilities.
+Hàm tạo mẫu mã hóa Blowfish.
 """
 
 from typing import Any, Dict, Tuple
@@ -13,14 +13,14 @@ from src.crypto.footer import append_metadata_footer
 
 def encrypt_blowfish_cbc(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using Blowfish-CBC.
+    Mã hóa dữ liệu bằng Blowfish-CBC.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (32 to 448, multiple of 8)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, từ 32 đến 448 và chia hết cho 8.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     if key_size < 32 or key_size > 448 or key_size % 8 != 0:
         raise ValueError("Blowfish key_size must be 32..448 bits and divisible by 8")

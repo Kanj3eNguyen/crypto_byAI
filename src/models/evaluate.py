@@ -1,5 +1,5 @@
 """
-Model evaluation utilities
+Các hàm hỗ trợ đánh giá mô hình.
 """
 
 import json
@@ -18,10 +18,10 @@ from sklearn.metrics import (
 
 
 class ModelEvaluator:
-    """Evaluate model performance"""
+    """Đánh giá chất lượng mô hình."""
     
     def __init__(self, label_encoder=None):
-        """Initialize evaluator"""
+        """Khởi tạo bộ đánh giá."""
         self.label_encoder = label_encoder
         self.metrics = {}
     
@@ -32,15 +32,15 @@ class ModelEvaluator:
         class_names: list = None
     ) -> Dict[str, Any]:
         """
-        Calculate evaluation metrics
-        
+        Tính các chỉ số đánh giá.
+
         Args:
-            y_true: True labels
-            y_pred: Predicted labels
-            class_names: Names of classes
-        
+            y_true: Nhãn đúng.
+            y_pred: Nhãn mô hình dự đoán.
+            class_names: Tên các lớp.
+
         Returns:
-            Dictionary of metrics
+            Dictionary chứa các chỉ số đánh giá.
         """
         self.metrics = {
             'accuracy': float(accuracy_score(y_true, y_pred)),
@@ -50,15 +50,15 @@ class ModelEvaluator:
             'f1_weighted': float(f1_score(y_true, y_pred, average='weighted', zero_division=0)),
         }
         
-        # Get class names if not provided
+        # Lấy tên lớp từ encoder nếu chưa truyền vào.
         if class_names is None and self.label_encoder:
             class_names = self.label_encoder.classes_.tolist()
         
-        # Confusion matrix
+        # Ma trận nhầm lẫn.
         cm = confusion_matrix(y_true, y_pred)
         self.metrics['confusion_matrix'] = cm.tolist()
         
-        # Classification report
+        # Báo cáo phân loại.
         class_report = classification_report(
             y_true, y_pred, 
             target_names=class_names,
@@ -70,10 +70,10 @@ class ModelEvaluator:
         return self.metrics
     
     def save_metrics(self, output_path: str) -> None:
-        """Save metrics to JSON file"""
+        """Lưu chỉ số đánh giá ra file JSON."""
         os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
         
-        # Convert numpy types to Python types for JSON serialization
+        # Chuyển kiểu numpy sang kiểu Python để ghi JSON.
         def convert_types(obj):
             if isinstance(obj, (np.integer, np.floating)):
                 return obj.item()
@@ -91,7 +91,7 @@ class ModelEvaluator:
             json.dump(metrics_to_save, f, indent=2, ensure_ascii=False)
     
     def plot_confusion_matrix(self, output_path: str, class_names: list = None) -> None:
-        """Plot and save confusion matrix"""
+        """Vẽ và lưu ma trận nhầm lẫn."""
         if 'confusion_matrix' not in self.metrics:
             raise ValueError("No confusion matrix in metrics")
         
@@ -113,7 +113,7 @@ class ModelEvaluator:
         plt.close()
     
     def save_classification_report(self, output_path: str) -> None:
-        """Save classification report as text"""
+        """Lưu báo cáo phân loại dạng text."""
         if 'classification_report' not in self.metrics:
             raise ValueError("No classification report in metrics")
         
@@ -122,7 +122,7 @@ class ModelEvaluator:
         os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
         
         with open(output_path, 'w', encoding='utf-8') as f:
-            # Write basic metrics
+            # Ghi các chỉ số tổng quát.
             f.write("MODEL EVALUATION REPORT\n")
             f.write("=" * 50 + "\n\n")
             
@@ -141,7 +141,7 @@ class ModelEvaluator:
                     f.write(f"{class_name}: {member_text}\n")
                 f.write("\n")
             
-            # Write per-class metrics
+            # Ghi chỉ số cho từng lớp.
             f.write("PER-CLASS METRICS\n")
             f.write("-" * 50 + "\n")
             

@@ -1,5 +1,5 @@
 """
-Train classification models for encryption prediction.
+Huấn luyện mô hình phân loại cho bài toán dự đoán mã hóa.
 """
 
 import os
@@ -22,7 +22,7 @@ from sklearn.preprocessing import LabelEncoder
 
 
 class ModelTrainer:
-    """Train, save, load, and run the crypto-group classifier."""
+    """Huấn luyện, lưu, nạp và chạy bộ phân loại nhóm mã hóa."""
 
     METADATA_COLUMNS = {
         "sample_id",
@@ -80,7 +80,7 @@ class ModelTrainer:
         df: pd.DataFrame,
         label_column: str = "label_group",
     ) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
-        """Split a feature dataframe into numeric X, labels y, and feature names."""
+        """Tách dataframe thành X dạng số, nhãn y và danh sách đặc trưng."""
         if label_column not in df.columns:
             raise ValueError(f"Label column not found: {label_column}")
 
@@ -115,7 +115,7 @@ class ModelTrainer:
         split: pd.Series = None,
         test_size: float = 0.2,
     ) -> Dict[str, Any]:
-        """Train the configured classifier and return basic holdout metrics."""
+        """Huấn luyện bộ phân loại và trả về các chỉ số đánh giá cơ bản."""
         if len(X) != len(y):
             raise ValueError("X and y must have the same number of rows")
 
@@ -217,7 +217,7 @@ class ModelTrainer:
         }
 
     def predict(self, X):
-        """Return encoded predictions and class probabilities."""
+        """Trả về nhãn đã mã hóa và xác suất của từng lớp."""
         if not self.trained or self.model is None:
             raise ValueError("Model must be trained before prediction")
 

@@ -1,5 +1,5 @@
 """
-Repeating-key XOR encryption utilities.
+Hàm tạo mẫu che giấu bằng XOR khóa lặp.
 """
 
 from typing import Any, Dict, Tuple
@@ -10,17 +10,16 @@ from Crypto.Util.strxor import strxor
 
 def encrypt_repeating_xor(data: bytes, key_size: int = 128) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using repeating-key XOR.
+    Biến đổi dữ liệu bằng XOR khóa lặp.
 
-    This is intentionally weak and is included to model simple ransomware-like
-    obfuscation seen in older or low-effort samples.
+    Nhóm này cố ý yếu, dùng để mô phỏng các mẫu che giấu đơn giản.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (multiple of 8)
+        data: Dữ liệu cần xử lý.
+        key_size: Độ dài khóa tính theo bit và chia hết cho 8.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     if key_size <= 0 or key_size % 8 != 0:
         raise ValueError("XOR key_size must be a positive multiple of 8")

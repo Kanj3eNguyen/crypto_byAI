@@ -1,5 +1,5 @@
 """
-Byte statistics and frequency analysis
+Thống kê byte và tần suất xuất hiện.
 """
 
 from typing import Dict
@@ -8,7 +8,7 @@ import numpy as np
 
 
 def calculate_byte_counts(data: bytes) -> np.ndarray:
-    """Calculate raw counts for byte values 0-255."""
+    """Đếm số lần xuất hiện của các giá trị byte 0-255."""
     if len(data) == 0:
         return np.zeros(256, dtype=np.int64)
 
@@ -17,7 +17,7 @@ def calculate_byte_counts(data: bytes) -> np.ndarray:
 
 
 def calculate_byte_frequencies_from_counts(counts, data_len: int) -> Dict[int, float]:
-    """Calculate byte frequencies from precomputed byte counts."""
+    """Tính tần suất byte từ mảng số lần xuất hiện đã có."""
     if data_len == 0:
         return {i: 0.0 for i in range(256)}
 
@@ -36,7 +36,7 @@ def _median_from_counts(counts, data_len: int) -> float:
 
 
 def calculate_byte_statistics_from_counts(counts, data_len: int) -> Dict[str, float]:
-    """Calculate byte-level statistics from precomputed byte counts."""
+    """Tính các thống kê mức byte từ mảng số lần xuất hiện đã có."""
     if data_len == 0:
         return {
             'unique_bytes': 0,
@@ -70,13 +70,13 @@ def calculate_byte_statistics_from_counts(counts, data_len: int) -> Dict[str, fl
 
 def calculate_byte_frequencies(data: bytes) -> Dict[int, float]:
     """
-    Calculate frequency of each byte value (0-255)
-    
+    Tính tần suất của từng giá trị byte 0-255.
+
     Args:
-        data: Bytes to analyze
-    
+        data: Dữ liệu byte cần phân tích.
+
     Returns:
-        Dictionary mapping byte value to frequency (0.0-1.0)
+        Dictionary ánh xạ giá trị byte sang tần suất 0.0-1.0.
     """
     data_len = len(data)
     counts = calculate_byte_counts(data)
@@ -85,13 +85,13 @@ def calculate_byte_frequencies(data: bytes) -> Dict[int, float]:
 
 def calculate_byte_statistics(data: bytes) -> Dict[str, float]:
     """
-    Calculate byte-level statistics
-    
+    Tính các thống kê mức byte.
+
     Args:
-        data: Bytes to analyze
-    
+        data: Dữ liệu byte cần phân tích.
+
     Returns:
-        Dictionary of byte statistics
+        Dictionary chứa các thống kê byte.
     """
     data_len = len(data)
     counts = calculate_byte_counts(data)
@@ -100,27 +100,27 @@ def calculate_byte_statistics(data: bytes) -> Dict[str, float]:
 
 def get_file_magic_bytes(data: bytes, n_bytes: int = 16) -> str:
     """
-    Get first N bytes as hex string (file magic/header)
-    
+    Lấy N byte đầu dưới dạng chuỗi hex.
+
     Args:
-        data: File data
-        n_bytes: Number of bytes to get
-    
+        data: Dữ liệu tệp.
+        n_bytes: Số byte cần lấy.
+
     Returns:
-        Hex string representation
+        Chuỗi hex biểu diễn các byte đầu tệp.
     """
     return data[:n_bytes].hex().upper()
 
 
 def get_footer_bytes(data: bytes, n_bytes: int = 16) -> str:
     """
-    Get last N bytes as hex string (file footer)
-    
+    Lấy N byte cuối dưới dạng chuỗi hex.
+
     Args:
-        data: File data
-        n_bytes: Number of bytes to get
-    
+        data: Dữ liệu tệp.
+        n_bytes: Số byte cần lấy.
+
     Returns:
-        Hex string representation
+        Chuỗi hex biểu diễn các byte cuối tệp.
     """
     return data[-n_bytes:].hex().upper() if len(data) >= n_bytes else data.hex().upper()

@@ -1,4 +1,4 @@
-"""Feature extraction module"""
+"""Module trích xuất đặc trưng."""
 
 __all__ = [
     'entropy',

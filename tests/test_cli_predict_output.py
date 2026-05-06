@@ -1,5 +1,5 @@
 """
-Tests for the CLI predict output structure.
+Kiểm thử cấu trúc output của lệnh predict.
 """
 
 from src.cli import build_predict_output

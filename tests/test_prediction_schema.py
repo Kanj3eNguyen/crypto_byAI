@@ -1,5 +1,5 @@
 """
-Test suite for prediction schema validation.
+Kiểm thử schema kết quả dự đoán.
 """
 
 import json
@@ -10,10 +10,10 @@ from src.models.predict import format_prediction_json
 
 
 class TestPredictionSchema:
-    """Test prediction output schema."""
+    """Kiểm thử schema output dự đoán."""
 
     def test_prediction_schema_structure(self):
-        """Test that prediction output has the group-first structure."""
+        """Kiểm thử output dự đoán có cấu trúc ưu tiên nhóm mã hóa."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,
@@ -83,7 +83,7 @@ class TestPredictionSchema:
         assert prediction["top_groups"][0]["crypto_group"] == "block_cipher_like"
 
     def test_prediction_json_serializable(self):
-        """Test that prediction output is JSON serializable."""
+        """Kiểm thử output dự đoán có thể serialize sang JSON."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,
@@ -111,7 +111,7 @@ class TestPredictionSchema:
         assert loaded["possible_encryption_summary"] == "block_cipher_like: AES"
 
     def test_legacy_unknown_high_entropy_label_is_renamed(self):
-        """Test that legacy unknown_high_entropy output is not exposed."""
+        """Kiểm thử nhãn cũ unknown_high_entropy không còn lộ ra output."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,
@@ -138,7 +138,7 @@ class TestPredictionSchema:
         )
 
     def test_broad_group_lists_member_encryption_types(self):
-        """Test that a broad label expands to its possible encryption types."""
+        """Kiểm thử nhãn nhóm được mở rộng thành các kiểu mã hóa có thể có."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,
@@ -169,7 +169,7 @@ class TestPredictionSchema:
         )
 
     def test_stream_group_summary_lists_compact_algorithms(self):
-        """Test stream labels render as stream_cipher_like: algorithms."""
+        """Kiểm thử nhãn stream hiển thị đúng phần thuật toán rút gọn."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,
@@ -189,7 +189,7 @@ class TestPredictionSchema:
         )
 
     def test_legacy_stream_group_summary_lists_compact_algorithms(self):
-        """Test legacy stream_cipher_like model labels expand correctly."""
+        """Kiểm thử nhãn cũ stream_cipher_like vẫn được mở rộng đúng."""
         prediction = format_prediction_json(
             file_path="test.enc",
             file_size=1024,

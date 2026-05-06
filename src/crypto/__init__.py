@@ -1,4 +1,4 @@
-"""Cryptography module for encryption operations"""
+"""Module chứa các hàm tạo mẫu mã hóa."""
 
 __all__ = [
     'encrypt_aes',

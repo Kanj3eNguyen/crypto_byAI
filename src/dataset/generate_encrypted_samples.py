@@ -1,5 +1,5 @@
 """
-Generate encrypted samples from original files
+Tạo mẫu mã hóa từ các tệp gốc.
 """
 
 import os
@@ -9,22 +9,22 @@ import csv
 
 
 class EncryptedSampleGenerator:
-    """Generate encrypted samples with metadata tracking"""
+    """Sinh mẫu mã hóa và ghi metadata đi kèm."""
     
     def __init__(self, output_dir: str, metadata_file: str = None):
         """
-        Initialize generator
-        
+        Khởi tạo bộ sinh mẫu.
+
         Args:
-            output_dir: Base directory for encrypted samples
-            metadata_file: Path to metadata CSV file
+            output_dir: Thư mục gốc để lưu mẫu mã hóa.
+            metadata_file: Đường dẫn file metadata CSV.
         """
         self.output_dir = output_dir
         self.metadata_file = metadata_file
         self.samples = []
         self.sample_counter = 0
         
-        # Create output directory if needed
+        # Tạo thư mục đầu ra nếu chưa có.
         Path(output_dir).mkdir(parents=True, exist_ok=True)
     
     def add_sample(
@@ -42,43 +42,43 @@ class EncryptedSampleGenerator:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Add an encrypted sample to the dataset
-        
+        Thêm một mẫu mã hóa vào tập dữ liệu.
+
         Args:
-            original_file_path: Path to original file
-            original_file_id: ID of original file
-            original_type: Type of original file (pdf, txt, etc.)
-            label_group: Classification label
-            algorithm: Encryption algorithm used
-            mode: Encryption mode (CBC, GCM, etc.)
-            key_size: Key size in bits
-            tool: Tool used for encryption
-            split: Dataset split (train/val/test)
-            ciphertext: Encrypted file content (bytes)
-            **kwargs: Additional metadata
-        
+            original_file_path: Đường dẫn tệp gốc.
+            original_file_id: Mã định danh của tệp gốc.
+            original_type: Loại tệp gốc.
+            label_group: Nhãn phân loại.
+            algorithm: Thuật toán mã hóa đã dùng.
+            mode: Chế độ mã hóa.
+            key_size: Độ dài khóa, tính theo bit.
+            tool: Công cụ dùng để mã hóa.
+            split: Phần chia dữ liệu train/val/test.
+            ciphertext: Nội dung tệp sau mã hóa.
+            **kwargs: Metadata bổ sung.
+
         Returns:
-            Dictionary with sample metadata
+            Dictionary chứa metadata của mẫu.
         """
         self.sample_counter += 1
         sample_id = f"{self.sample_counter:06d}"
         
-        # Create encrypted file path
+        # Tạo đường dẫn tệp mã hóa.
         encrypted_path = os.path.join(
             self.output_dir,
             label_group,
             f"{sample_id}.enc"
         )
         
-        # Create label directory if needed
+        # Tạo thư mục nhãn nếu chưa có.
         Path(os.path.dirname(encrypted_path)).mkdir(parents=True, exist_ok=True)
         
-        # Write ciphertext
+        # Ghi ciphertext ra tệp.
         if ciphertext is not None:
             with open(encrypted_path, 'wb') as f:
                 f.write(ciphertext)
         
-        # Create metadata entry
+        # Tạo bản ghi metadata.
         file_size = os.path.getsize(encrypted_path) if os.path.exists(encrypted_path) else 0
         
         metadata = {
@@ -95,7 +95,7 @@ class EncryptedSampleGenerator:
             'file_size': file_size
         }
         
-        # Add any additional metadata
+        # Gắn metadata bổ sung nếu có.
         metadata.update(kwargs)
         
         self.samples.append(metadata)
@@ -103,30 +103,30 @@ class EncryptedSampleGenerator:
         return metadata
     
     def save_metadata(self):
-        """Save all samples metadata to CSV file"""
+        """Lưu metadata của toàn bộ mẫu ra file CSV."""
         if not self.metadata_file:
             return
         
         if not self.samples:
             return
         
-        # Create metadata directory
+        # Tạo thư mục metadata nếu chưa có.
         Path(os.path.dirname(self.metadata_file)).mkdir(parents=True, exist_ok=True)
         
-        # Get all keys from samples
+        # Lấy toàn bộ tên cột từ các mẫu.
         fieldnames = set()
         for sample in self.samples:
             fieldnames.update(sample.keys())
         
-        # Sort field names for consistent output
+        # Sắp xếp tên cột để file đầu ra ổn định.
         fieldnames = sorted(list(fieldnames))
         
-        # Write CSV
+        # Ghi file CSV.
         with open(self.metadata_file, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self.samples)
     
     def get_samples_count(self) -> int:
-        """Get number of samples generated"""
+        """Trả về số mẫu đã sinh."""
         return len(self.samples)

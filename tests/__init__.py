@@ -1,3 +1,3 @@
 """
-Initialize tests module
+Khởi tạo module kiểm thử.
 """

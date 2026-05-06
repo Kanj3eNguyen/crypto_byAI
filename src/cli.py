@@ -1,5 +1,5 @@
 """
-Command-line interface for ransomware crypto prediction
+Giao diện dòng lệnh cho chương trình phân tích mã hóa ransomware.
 """
 
 import click
@@ -47,19 +47,19 @@ KNOWN_LABELS = (
 
 
 def add_crypto_family_column(df: pd.DataFrame) -> pd.DataFrame:
-    """Add broad crypto family labels derived from label_group."""
+    """Thêm cột nhóm mã hóa tổng quát từ `label_group`."""
     if 'label_group' in df.columns and 'crypto_family' not in df.columns:
         df['crypto_family'] = df['label_group'].map(CRYPTO_FAMILY_MAP)
     return df
 
 
 def normalize_path_key(path_value) -> str:
-    """Normalize path strings for stable metadata joins across slash styles."""
+    """Chuẩn hóa đường dẫn để join metadata ổn định giữa các kiểu dấu gạch."""
     return str(path_value).replace('\\', '/').rstrip('/').lower()
 
 
 def assign_split(index: int, total: int, train_ratio: float, val_ratio: float) -> str:
-    """Assign deterministic train/val/test split by item position."""
+    """Gán split train/val/test theo vị trí của mẫu."""
     train_cutoff = int(total * train_ratio)
     val_cutoff = train_cutoff + int(total * val_ratio)
     if index < train_cutoff:
@@ -71,37 +71,37 @@ def assign_split(index: int, total: int, train_ratio: float, val_ratio: float) -
 
 @click.group()
 def cli():
-    """Ransomware Crypto AI - Command Line Interface"""
+    """Công cụ dòng lệnh phân tích mã hóa ransomware."""
     pass
 
 
 @cli.command()
-@click.option('--input', '-i', default='data/raw/original', help='Directory with original files')
-@click.option('--output', '-o', default='data/generated', help='Generated sample output directory')
-@click.option('--metadata', '-m', default='data/metadata/dataset.csv', help='Metadata CSV output path')
-@click.option('--limit', type=int, help='Maximum number of original files to process')
+@click.option('--input', '-i', default='data/raw/original', help='Thư mục chứa tệp gốc')
+@click.option('--output', '-o', default='data/generated', help='Thư mục lưu mẫu đã sinh')
+@click.option('--metadata', '-m', default='data/metadata/dataset.csv', help='Đường dẫn metadata CSV')
+@click.option('--limit', type=int, help='Số tệp gốc tối đa cần xử lý')
 @click.option(
     '--workers',
     default=1,
     show_default=True,
     type=click.IntRange(min=0),
-    help='Parallel file-generation workers. Use 0 to auto-select.',
+    help='Số worker khi sinh mẫu. Dùng 0 để tự chọn.',
 )
-@click.option('--include-hybrid/--skip-hybrid', default=True, help='Include hybrid AES+RSA samples')
+@click.option('--include-hybrid/--skip-hybrid', default=True, help='Có sinh mẫu mã hóa lai hay không')
 @click.option(
     '--clean-output/--keep-output',
     default=False,
-    help='Remove existing generated samples before writing new ones.',
+    help='Xóa mẫu đã sinh trước đó trước khi ghi mẫu mới.',
 )
 @click.option(
     '--profile',
     type=click.Choice(['group-balanced', 'all-variants']),
     default='group-balanced',
     show_default=True,
-    help='Generation profile. Use group-balanced for crypto_family training.',
+    help='Kiểu sinh mẫu. group-balanced phù hợp khi huấn luyện crypto_family.',
 )
 def generate_samples(input, output, metadata, limit, workers, include_hybrid, clean_output, profile):
-    """Generate labeled encrypted/compressed/plain samples from original files."""
+    """Tạo mẫu plain, nén và mã hóa có nhãn từ các tệp gốc."""
     import gzip
 
     from src.crypto.encrypt_3des import encrypt_3des_cbc
@@ -296,13 +296,13 @@ def generate_samples(input, output, metadata, limit, workers, include_hybrid, cl
 
 
 @cli.command()
-@click.option('--input', '-i', default='data/ransomware_family', help='Directory with one subdirectory per ransomware family')
-@click.option('--output', '-o', default='data/metadata/ransomware_family_dataset.csv', help='Metadata CSV output path')
-@click.option('--limit-per-family', type=int, help='Maximum files to use from each family directory')
-@click.option('--train-ratio', default=0.7, show_default=True, help='Train split ratio per family')
-@click.option('--val-ratio', default=0.15, show_default=True, help='Validation split ratio per family')
-@click.option('--test-ratio', default=0.15, show_default=True, help='Test split ratio per family')
-@click.option('--random-state', default=42, show_default=True, help='Random seed for per-family shuffling')
+@click.option('--input', '-i', default='data/ransomware_family', help='Thư mục có các thư mục con theo họ ransomware')
+@click.option('--output', '-o', default='data/metadata/ransomware_family_dataset.csv', help='Đường dẫn metadata CSV')
+@click.option('--limit-per-family', type=int, help='Số tệp tối đa dùng trong mỗi họ')
+@click.option('--train-ratio', default=0.7, show_default=True, help='Tỷ lệ train cho mỗi họ')
+@click.option('--val-ratio', default=0.15, show_default=True, help='Tỷ lệ validation cho mỗi họ')
+@click.option('--test-ratio', default=0.15, show_default=True, help='Tỷ lệ test cho mỗi họ')
+@click.option('--random-state', default=42, show_default=True, help='Seed khi xáo trộn tệp trong từng họ')
 def build_ransomware_metadata(
     input,
     output,
@@ -312,7 +312,7 @@ def build_ransomware_metadata(
     test_ratio,
     random_state,
 ):
-    """Build metadata for real ransomware-family encrypted datasets."""
+    """Tạo metadata cho tập dữ liệu ransomware được chia theo họ."""
     input_path = Path(input)
     if not input_path.exists():
         raise click.ClickException(f"Input directory not found: {input}")
@@ -368,22 +368,22 @@ def build_ransomware_metadata(
 
 
 @cli.command()
-@click.option('--input', '-i', required=True, help='Input file or directory')
-@click.option('--output', '-o', default='data/features/features.parquet', help='Output parquet file')
-@click.option('--metadata', '-m', help='Metadata CSV file with labels')
-@click.option('--block-size', default=4096, type=click.IntRange(min=1), help='Block size for entropy calculation')
+@click.option('--input', '-i', required=True, help='Tệp hoặc thư mục đầu vào')
+@click.option('--output', '-o', default='data/features/features.parquet', help='File parquet đầu ra')
+@click.option('--metadata', '-m', help='File metadata CSV có nhãn')
+@click.option('--block-size', default=4096, type=click.IntRange(min=1), help='Kích thước block khi tính entropy')
 @click.option(
     '--workers',
     default=1,
     show_default=True,
     type=click.IntRange(min=0),
-    help='Parallel worker processes. Use 0 to auto-select CPU count.',
+    help='Số worker xử lý song song. Dùng 0 để tự chọn theo CPU.',
 )
 def extract_features(input, output, metadata, block_size, workers):
-    """Extract features from files"""
+    """Trích xuất đặc trưng từ tệp hoặc thư mục."""
     click.echo(f"Extracting features from: {input}")
 
-    # Get list of files
+    # Lấy danh sách tệp cần xử lý.
     if os.path.isfile(input):
         files = [input]
     else:
@@ -397,13 +397,13 @@ def extract_features(input, output, metadata, block_size, workers):
 
     click.echo(f"Found {len(files)} files")
 
-    # Extract features
+    # Trích xuất đặc trưng.
     df = extract_features_batch(files, block_size=block_size, workers=workers, verbose=True)
 
-    # Add labels from metadata if provided
+    # Gắn nhãn từ metadata nếu có truyền vào.
     if metadata and os.path.exists(metadata):
         meta_df = pd.read_csv(metadata)
-        # Try to join on 'path' column
+        # Join theo cột `path` sau khi chuẩn hóa đường dẫn.
         if 'path' in meta_df.columns and 'path' in df.columns:
             metadata_columns = [
                 column
@@ -431,23 +431,23 @@ def extract_features(input, output, metadata, block_size, workers):
 
     df = add_crypto_family_column(df)
     
-    # Save output
+    # Lưu kết quả ra file parquet.
     os.makedirs(os.path.dirname(output) or '.', exist_ok=True)
     df.to_parquet(output, index=False)
     click.echo(f"Features saved to: {output}")
 
 
 @cli.command()
-@click.option('--features', '-f', required=True, help='Features parquet file')
-@click.option('--label-column', default='label_group', help='Label column name')
-@click.option('--model-output', '-o', default='models/crypto_predictor.pkl', help='Model output path')
-@click.option('--report-dir', default='reports', help='Report output directory')
-@click.option('--metadata', '-m', default='data/metadata/dataset.csv', help='Metadata CSV file with labels/splits')
+@click.option('--features', '-f', required=True, help='File parquet chứa đặc trưng')
+@click.option('--label-column', default='label_group', help='Tên cột nhãn')
+@click.option('--model-output', '-o', default='models/crypto_predictor.pkl', help='Đường dẫn lưu mô hình')
+@click.option('--report-dir', default='reports', help='Thư mục lưu báo cáo')
+@click.option('--metadata', '-m', default='data/metadata/dataset.csv', help='File metadata CSV có nhãn và split')
 def train(features, label_column, model_output, report_dir, metadata):
-    """Train encryption prediction model"""
+    """Huấn luyện mô hình dự đoán mã hóa."""
     click.echo(f"Loading features from: {features}")
     
-    # Load features
+    # Đọc file đặc trưng.
     df = pd.read_parquet(features)
     df = add_crypto_family_column(df)
     click.echo(f"Loaded {len(df)} samples with {len(df.columns)} features")
@@ -498,13 +498,13 @@ def train(features, label_column, model_output, report_dir, metadata):
 
     df = add_crypto_family_column(df)
     
-    # Check if label column exists
+    # Kiểm tra cột nhãn cần huấn luyện.
     if label_column not in df.columns:
         click.echo(f"ERROR: Label column '{label_column}' not found in dataframe")
         click.echo(f"Available columns: {', '.join(df.columns[:10])}")
         return
     
-    # Train model
+    # Huấn luyện mô hình.
     trainer = ModelTrainer(model_type='random_forest')
     X, y, _ = trainer.prepare_data(df, label_column)
     split = df.loc[X.index, 'split'] if 'split' in df.columns else None
@@ -525,7 +525,7 @@ def train(features, label_column, model_output, report_dir, metadata):
         f"f1_weighted={train_info['f1_weighted']:.4f}"
     )
     
-    # Save model
+    # Lưu mô hình.
     trainer.save_model(model_output)
     click.echo(f"Model saved to: {model_output}")
     
@@ -541,11 +541,11 @@ def train(features, label_column, model_output, report_dir, metadata):
     )
     click.echo(f"Evaluation reports saved to: {report_dir}")
 
-    # Save feature importance
+    # Lưu độ quan trọng của đặc trưng.
     if hasattr(trainer.model, 'feature_importances_'):
         importance = trainer.get_feature_importance()
         
-        # Save top 30 features
+        # Lưu 30 đặc trưng quan trọng nhất.
         with open(os.path.join(report_dir, 'top_features.json'), 'w', encoding='utf-8') as f:
             top_features = {k: v for k, v in list(importance.items())[:30]}
             json.dump(top_features, f, indent=2)
@@ -554,19 +554,19 @@ def train(features, label_column, model_output, report_dir, metadata):
 
 
 @cli.command()
-@click.option('--file', '-f', required=True, help='File to predict')
-@click.option('--model', '-m', default='models/crypto_family_predictor.pkl', help='Crypto-family model path')
-@click.option('--ransomware-model', '-r', default='models/ransomware_family_predictor.pkl', help='Optional ransomware-family model path')
-@click.option('--features', help='Optionally save extracted features')
+@click.option('--file', '-f', required=True, help='Tệp cần dự đoán')
+@click.option('--model', '-m', default='models/crypto_family_predictor.pkl', help='Đường dẫn mô hình nhóm mã hóa')
+@click.option('--ransomware-model', '-r', default='models/ransomware_family_predictor.pkl', help='Đường dẫn mô hình họ ransomware, có thể bỏ trống')
+@click.option('--features', help='Lưu đặc trưng đã trích xuất nếu cần')
 def predict(file, model, ransomware_model, features):
-    """Predict encryption algorithm for a file (crypto + optional ransomware family)"""
+    """Dự đoán nhóm mã hóa và có thể kèm họ ransomware cho một tệp."""
 
-    # Check crypto model exists
+    # Kiểm tra mô hình nhóm mã hóa.
     if not os.path.exists(model):
         click.echo(f"ERROR: Crypto model not found at {model}")
         return
 
-    # Warn if ransomware model not present, but continue with crypto
+    # Nếu thiếu mô hình họ ransomware thì vẫn tiếp tục dự đoán nhóm mã hóa.
     if ransomware_model and not os.path.exists(ransomware_model):
         click.echo(f"WARNING: Ransomware model not found at {ransomware_model}; skipping ransomware prediction")
         ransomware_model = None
@@ -591,7 +591,7 @@ def predict(file, model, ransomware_model, features):
         ensure_ascii=False,
     ))
 
-    # Optionally save features
+    # Lưu đặc trưng nếu người dùng yêu cầu.
     features_path = features
     if features_path and combined.get('features') is not None:
         with open(features_path, 'w', encoding='utf-8') as f:
@@ -600,7 +600,7 @@ def predict(file, model, ransomware_model, features):
 
 
 def build_predict_output(file_path, crypto_model_path, ransomware_model_path, combined):
-    """Build the merged CLI output for predict."""
+    """Tạo output gộp cho lệnh predict."""
     return build_combined_prediction_output(
         file_path=file_path,
         crypto_model_path=crypto_model_path,
@@ -610,26 +610,26 @@ def build_predict_output(file_path, crypto_model_path, ransomware_model_path, co
 
 
 @cli.command()
-@click.option('--help', is_flag=True, help='Show example usage')
+@click.option('--help', is_flag=True, help='Hiển thị ví dụ sử dụng')
 def examples(help):
-    """Show example commands"""
+    """Hiển thị một số lệnh ví dụ."""
     examples_text = """
-RANSOMWARE CRYPTO AI - USAGE EXAMPLES
-====================================
+VI DU SU DUNG
+=============
 
-1. Extract features from files:
+1. Trich xuat dac trung:
    python -m src.cli extract-features --input data/generated --output data/features/features.parquet
 
-2. Train model:
+2. Huan luyen mo hinh:
    python -m src.cli train --features data/features/features.parquet --model-output models/crypto_predictor.pkl
 
-3. Predict encryption for a file:
+3. Du doan mot tep:
    python -m src.cli predict --file suspicious.enc --model models/crypto_predictor.pkl
 
-4. Run API server:
+4. Chay API server:
    uvicorn src.api.app:app --reload --port 8000
 
-5. Check API endpoints:
+5. Kiem tra API:
    curl http://localhost:8000/health
    curl -X POST -F "file=@suspicious.enc" http://localhost:8000/predict
 """

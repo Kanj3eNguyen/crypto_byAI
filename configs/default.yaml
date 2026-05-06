@@ -1,4 +1,4 @@
-# Default configuration for Ransomware Crypto AI Project
+# Cấu hình mặc định của dự án
 
 dataset:
   raw_dir: "data/raw/original"
@@ -6,13 +6,13 @@ dataset:
   metadata_dir: "data/metadata"
   features_dir: "data/features"
   
-  # Split ratios
+  # Tỷ lệ chia dữ liệu
   train_ratio: 0.7
   val_ratio: 0.15
   test_ratio: 0.15
 
 encryption:
-  # Encryption algorithms to generate
+  # Các thuật toán dùng khi tạo dữ liệu mẫu
   generation_profile: "group-balanced"
   algorithms:
     - name: "AES"
@@ -62,14 +62,14 @@ encryption:
       key_sizes: [256]
 
 feature_extraction:
-  # Block size for entropy calculation
+  # Kích thước block khi tính entropy
   block_size: 4096
   
-  # Entropy thresholds for feature generation
+  # Ngưỡng entropy dùng khi tạo đặc trưng
   entropy_threshold_high: 7.5
   entropy_threshold_very_high: 7.8
   
-  # Features to extract
+  # Nhóm đặc trưng cần trích xuất
   features:
     - file_size
     - entropy_full
@@ -83,10 +83,10 @@ feature_extraction:
     - footer_heuristics
 
 model:
-  # Model type: random_forest, xgboost, svm, logistic_regression
+  # Loại mô hình: random_forest, xgboost, svm, logistic_regression
   type: "random_forest"
   
-  # Random Forest parameters
+  # Tham số Random Forest
   random_forest:
     n_estimators: 200
     max_depth: 20
@@ -95,7 +95,7 @@ model:
     random_state: 42
     n_jobs: -1
     
-  # XGBoost parameters (optional)
+  # Tham số XGBoost nếu cần dùng
   xgboost:
     n_estimators: 200
     max_depth: 8
@@ -104,7 +104,7 @@ model:
     n_jobs: -1
 
 evaluation:
-  # Metrics to calculate
+  # Các chỉ số đánh giá
   metrics:
     - accuracy
     - precision_macro
@@ -114,14 +114,14 @@ evaluation:
     - confusion_matrix
     - classification_report
   
-  # Report output paths
+  # Thư mục lưu báo cáo
   report_dir: "reports"
 
 prediction:
-  # Number of top predictions to return
+  # Số nhãn có xác suất cao nhất cần trả về
   top_k: 3
   
-  # Confidence threshold for warning
+  # Ngưỡng confidence dùng để cảnh báo
   confidence_warning_threshold: 0.7
 
 labels:

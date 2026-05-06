@@ -1,5 +1,5 @@
 """
-Build metadata CSV from generated samples
+Tạo file metadata CSV từ các mẫu đã sinh.
 """
 
 import os
@@ -12,25 +12,25 @@ def build_metadata_csv(
     output_file: str
 ) -> None:
     """
-    Build metadata CSV from directory structure
-    
+    Tạo metadata CSV từ cấu trúc thư mục.
+
     Args:
-        samples_dir: Directory containing generated samples
-        output_file: Output CSV file path
+        samples_dir: Thư mục chứa các mẫu đã sinh.
+        output_file: Đường dẫn file CSV đầu ra.
     """
     Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
     
     rows = []
     sample_counter = 0
     
-    # Walk through label directories
+    # Duyệt các thư mục nhãn.
     for label_group in os.listdir(samples_dir):
         label_path = os.path.join(samples_dir, label_group)
         
         if not os.path.isdir(label_path):
             continue
         
-        # Process each file in label directory
+        # Xử lý từng tệp trong thư mục nhãn.
         for filename in os.listdir(label_path):
             if filename.startswith('.'):
                 continue
@@ -57,7 +57,7 @@ def build_metadata_csv(
                 
                 rows.append(row)
     
-    # Write CSV
+    # Ghi file CSV.
     if rows:
         fieldnames = rows[0].keys()
         with open(output_file, 'w', newline='', encoding='utf-8') as f:

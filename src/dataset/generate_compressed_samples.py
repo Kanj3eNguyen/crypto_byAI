@@ -1,5 +1,5 @@
 """
-Generate compressed samples (not_encrypted and compressed_only groups)
+Tạo mẫu không mã hóa và mẫu chỉ nén.
 """
 
 import os
@@ -10,10 +10,10 @@ from pathlib import Path
 
 
 class CompressedSampleGenerator:
-    """Generate compressed/uncompressed samples"""
+    """Sinh các mẫu nén và không nén."""
     
     def __init__(self, output_dir: str):
-        """Initialize generator"""
+        """Khởi tạo bộ sinh mẫu."""
         self.output_dir = output_dir
         Path(output_dir).mkdir(parents=True, exist_ok=True)
     
@@ -23,7 +23,7 @@ class CompressedSampleGenerator:
         label_group: str,
         sample_id: str
     ) -> str:
-        """Copy file as-is to not_encrypted group"""
+        """Sao chép nguyên tệp vào nhóm not_encrypted."""
         output_dir = os.path.join(self.output_dir, label_group)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         
@@ -37,7 +37,7 @@ class CompressedSampleGenerator:
         source_file: str,
         sample_id: str
     ) -> str:
-        """Create ZIP compressed version"""
+        """Tạo phiên bản nén ZIP."""
         output_dir = os.path.join(self.output_dir, "compressed_only")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         
@@ -53,7 +53,7 @@ class CompressedSampleGenerator:
         source_file: str,
         sample_id: str
     ) -> str:
-        """Create GZIP compressed version"""
+        """Tạo phiên bản nén GZIP."""
         output_dir = os.path.join(self.output_dir, "compressed_only")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         

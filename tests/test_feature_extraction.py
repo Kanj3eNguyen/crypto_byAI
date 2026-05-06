@@ -1,5 +1,5 @@
 """
-Test suite for feature extraction
+Kiểm thử phần trích xuất đặc trưng.
 """
 
 import pytest
@@ -9,11 +9,11 @@ from src.features.extract_features import extract_features_from_file
 
 
 class TestFeatureExtraction:
-    """Test feature extraction from files"""
+    """Kiểm thử trích xuất đặc trưng từ tệp."""
     
     def test_extract_features_from_random_file(self):
-        """Test feature extraction from random data"""
-        # Create temporary file with random data
+        """Kiểm thử trích xuất đặc trưng từ dữ liệu ngẫu nhiên."""
+        # Tạo file tạm chứa dữ liệu ngẫu nhiên.
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(os.urandom(4096))
             tmp_path = tmp.name
@@ -28,14 +28,14 @@ class TestFeatureExtraction:
             assert 'footer_metadata_score' in features, "Should have footer metadata score"
             assert features['file_size'] == 4096, "File size should be 4096"
             
-            # Random data should have high entropy
+            # Dữ liệu ngẫu nhiên phải có entropy cao.
             assert features['shannon_entropy_full'] > 7.0, "Random data should have high entropy"
         
         finally:
             os.unlink(tmp_path)
     
     def test_extract_features_consistency(self):
-        """Test that same file produces same features"""
+        """Kiểm thử cùng một tệp cho ra cùng bộ đặc trưng."""
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(b'test' * 1024)
             tmp_path = tmp.name
@@ -55,7 +55,7 @@ class TestFeatureExtraction:
             os.unlink(tmp_path)
 
     def test_footer_length_marker_features(self):
-        """Test detection of a ransomware-like footer length marker."""
+        """Kiểm thử nhận diện marker độ dài footer kiểu ransomware."""
         footer_body = os.urandom(16 + 256)
         footer = footer_body + len(footer_body).to_bytes(4, byteorder='big')
 
@@ -75,7 +75,7 @@ class TestFeatureExtraction:
             os.unlink(tmp_path)
     
     def test_byte_histogram_sum(self):
-        """Test that byte histogram frequencies sum to 1"""
+        """Kiểm thử tổng tần suất histogram byte bằng 1."""
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(os.urandom(1024))
             tmp_path = tmp.name
@@ -83,10 +83,10 @@ class TestFeatureExtraction:
         try:
             features = extract_features_from_file(tmp_path)
             
-            # Sum all byte frequencies
+            # Cộng toàn bộ tần suất byte.
             histogram_sum = sum(features.get(f'byte_{i}_freq', 0) for i in range(256))
             
-            # Should be very close to 1.0
+            # Tổng phải rất gần 1.0.
             assert abs(histogram_sum - 1.0) < 0.0001, "Byte histogram should sum to 1"
         
         finally:

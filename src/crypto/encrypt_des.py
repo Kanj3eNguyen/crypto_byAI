@@ -1,5 +1,5 @@
 """
-DES encryption utilities.
+Hàm tạo mẫu mã hóa DES.
 """
 
 from typing import Any, Dict, Tuple
@@ -13,14 +13,14 @@ from src.crypto.footer import append_metadata_footer
 
 def encrypt_des_cbc(data: bytes, key_size: int = 56) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using DES-CBC.
+    Mã hóa dữ liệu bằng DES-CBC.
 
     Args:
-        data: Data to encrypt
-        key_size: Effective key size in bits (56 for DES)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa hiệu dụng tính theo bit, DES dùng 56 bit.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     if key_size != 56:
         raise ValueError("DES uses a 56-bit effective key")

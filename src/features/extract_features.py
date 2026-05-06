@@ -1,5 +1,5 @@
 """
-Extract features from encrypted files
+Trích xuất đặc trưng từ tệp cần phân tích.
 """
 
 import os
@@ -27,7 +27,7 @@ from src.features.file_structure import analyze_file_structure
 
 
 def calculate_advanced_byte_features(data: bytes, byte_counts=None) -> Dict[str, float]:
-    """Calculate statistical byte features useful for encrypted-family fingerprints."""
+    """Tính các đặc trưng byte dùng để phân biệt nhóm mã hóa."""
     data_len = len(data)
     if data_len == 0:
         return {
@@ -113,7 +113,7 @@ def calculate_advanced_byte_features(data: bytes, byte_counts=None) -> Dict[str,
 
 
 def calculate_segment_features(data: bytes) -> Dict[str, float]:
-    """Calculate entropy and byte-distribution features for file regions."""
+    """Tính entropy và phân bố byte cho các vùng trong tệp."""
     segments = {
         'first_256': data[:256],
         'first_1024': data[:1024],
@@ -146,7 +146,7 @@ def calculate_segment_features(data: bytes) -> Dict[str, float]:
 
 
 def _normalized_entropy(data: bytes) -> float:
-    """Calculate entropy scaled to the maximum possible entropy for this length."""
+    """Tính entropy đã chuẩn hóa theo độ dài đoạn dữ liệu."""
     data_len = len(data)
     if data_len <= 1:
         return 0.0
@@ -159,7 +159,7 @@ def _normalized_entropy(data: bytes) -> float:
 
 
 def _random_like_segment(data: bytes, min_len: int = 8) -> float:
-    """Return 1.0 when a short segment looks like nonce/tag/key material."""
+    """Trả về 1.0 nếu đoạn ngắn giống nonce, tag hoặc khóa."""
     data_len = len(data)
     if data_len < min_len:
         return 0.0
@@ -177,7 +177,7 @@ def _random_like_segment(data: bytes, min_len: int = 8) -> float:
 
 
 def _plausible_footer_length_values(data_len: int, value: int) -> bool:
-    """Return whether a decoded footer length marker is plausible."""
+    """Kiểm tra giá trị độ dài footer sau khi giải mã marker."""
     max_footer_size = min(data_len - 4, 4096)
     common_footer_sizes = {
         8,
@@ -205,7 +205,7 @@ def _plausible_footer_length_values(data_len: int, value: int) -> bool:
 
 
 def _find_footer_marker(data: bytes):
-    """Find a plausible footer marker at the end or before footer bytes."""
+    """Tìm marker footer hợp lý ở cuối tệp hoặc trước phần footer."""
     if len(data) < 12:
         return 0, ''
 
@@ -231,7 +231,7 @@ def _find_footer_marker(data: bytes):
 
 
 def calculate_footer_features(data: bytes) -> Dict[str, float]:
-    """Calculate numeric footer heuristics for ransomware-like metadata."""
+    """Tính các đặc trưng footer gợi ý metadata kiểu ransomware."""
     features = {}
     data_len = len(data)
     footer_sizes = (8, 12, 16, 24, 28, 32, 40, 64, 128, 256, 512)
@@ -364,14 +364,14 @@ def calculate_footer_features(data: bytes) -> Dict[str, float]:
 
 def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[str, Any]:
     """
-    Extract all features from a single file
-    
+    Trích xuất toàn bộ đặc trưng từ một tệp.
+
     Args:
-        file_path: Path to file
-        block_size: Block size for entropy calculation
-    
+        file_path: Đường dẫn tệp.
+        block_size: Kích thước block dùng khi tính entropy.
+
     Returns:
-        Dictionary of extracted features
+        Dictionary chứa các đặc trưng đã trích xuất.
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -382,7 +382,7 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     features = {}
     features['path'] = file_path
     
-    # File size features
+    # Đặc trưng kích thước tệp.
     file_size = len(data)
     features['file_size'] = file_size
     features['file_size_mod_8'] = file_size % 8
@@ -391,11 +391,11 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     
     byte_counts = calculate_byte_counts(data)
 
-    # Full entropy
+    # Entropy toàn tệp.
     full_entropy = calculate_entropy_from_counts(byte_counts, file_size)
     features['shannon_entropy_full'] = full_entropy
     
-    # Block entropy
+    # Entropy theo block.
     block_entropies, entropy_stats = calculate_block_entropy(data, block_size)
     features['entropy_mean'] = entropy_stats['mean']
     features['entropy_std'] = entropy_stats['std']
@@ -407,7 +407,7 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     features['high_entropy_block_ratio'] = entropy_stats.get('high_entropy_ratio', 0.0)
     features['very_high_entropy_block_ratio'] = entropy_stats.get('very_high_entropy_ratio', 0.0)
     
-    # Byte statistics
+    # Thống kê byte.
     byte_freqs = calculate_byte_frequencies_from_counts(byte_counts, file_size)
     byte_stats = calculate_byte_statistics_from_counts(byte_counts, file_size)
     
@@ -420,25 +420,25 @@ def extract_features_from_file(file_path: str, block_size: int = 4096) -> Dict[s
     features['byte_max'] = byte_stats['byte_max']
     features['byte_median'] = byte_stats['byte_median']
     
-    # Byte histogram (256 features)
+    # Histogram byte gồm 256 đặc trưng.
     for byte_val in range(256):
         features[f'byte_{byte_val}_freq'] = byte_freqs[byte_val]
 
-    # Advanced encrypted-file statistics
+    # Các thống kê nâng cao cho dữ liệu mã hóa.
     features.update(calculate_advanced_byte_features(data, byte_counts=byte_counts))
     features.update(calculate_segment_features(data))
     features.update(calculate_footer_features(data))
     
-    # File structure
+    # Cấu trúc tệp.
     structure = analyze_file_structure(data, file_path)
     features['file_size'] = structure['file_size']
     features['has_known_signature'] = structure['has_known_signature']
     
-    # Magic bytes (first 16 bytes)
+    # Magic bytes: 16 byte đầu tệp.
     magic_bytes_str = get_file_magic_bytes(data, 16)
     features['magic_bytes_hex'] = magic_bytes_str
     
-    # Footer bytes (last 16 bytes)
+    # Footer bytes: 16 byte cuối tệp.
     footer_bytes_str = get_footer_bytes(data, 16)
     features['footer_bytes_hex'] = footer_bytes_str
     
@@ -461,17 +461,17 @@ def extract_features_batch(
     verbose: bool = True
 ) -> pd.DataFrame:
     """
-    Extract features from multiple files
-    
+    Trích xuất đặc trưng từ nhiều tệp.
+
     Args:
-        file_paths: List of file paths
-        output_file: Optional output parquet file
-        block_size: Block size for entropy calculation
-        workers: Number of worker processes. Use 0 to auto-select CPU count.
-        verbose: Show progress bar
-    
+        file_paths: Danh sách đường dẫn tệp.
+        output_file: File parquet đầu ra nếu cần lưu.
+        block_size: Kích thước block dùng khi tính entropy.
+        workers: Số tiến trình xử lý. Dùng 0 để tự chọn theo CPU.
+        verbose: Có hiển thị thanh tiến trình hay không.
+
     Returns:
-        DataFrame with extracted features
+        DataFrame chứa đặc trưng đã trích xuất.
     """
     if workers == 0:
         workers = max((os.cpu_count() or 2) - 1, 1)

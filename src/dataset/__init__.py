@@ -1,4 +1,4 @@
-"""Dataset module for handling data preparation and splitting"""
+"""Module xử lý phần chuẩn bị và chia dữ liệu."""
 
 __all__ = [
     'build_dataset',

@@ -1,5 +1,5 @@
 """
-Test suite for entropy module
+Kiểm thử module entropy.
 """
 
 import pytest
@@ -7,24 +7,24 @@ from src.features.entropy import calculate_entropy, calculate_block_entropy
 
 
 class TestEntropyCalculation:
-    """Test entropy calculation functions"""
+    """Kiểm thử các hàm tính entropy."""
     
     def test_entropy_uniform_distribution(self):
-        """Test entropy with uniform byte distribution"""
-        # All bytes are the same
+        """Kiểm thử entropy khi toàn bộ byte giống nhau."""
+        # Tất cả byte đều giống nhau.
         data = b'\x00' * 256
         entropy = calculate_entropy(data)
         assert entropy == 0.0, "Entropy of all zeros should be 0"
     
     def test_entropy_random_data(self):
-        """Test entropy with random-like data"""
-        # Data with high entropy should score high
-        data = bytes(range(256)) * 4  # Uniform distribution
+        """Kiểm thử entropy với dữ liệu có phân bố gần đều."""
+        # Dữ liệu entropy cao phải cho điểm entropy cao.
+        data = bytes(range(256)) * 4  # Phân bố đều.
         entropy = calculate_entropy(data)
         assert entropy > 7.9, "Uniform distribution should have high entropy"
     
     def test_block_entropy(self):
-        """Test block entropy calculation"""
+        """Kiểm thử tính entropy theo block."""
         data = bytes(range(256)) * 20  # 5120 bytes
         block_entropies, stats = calculate_block_entropy(data, block_size=256)
         
@@ -34,12 +34,12 @@ class TestEntropyCalculation:
 
 
 class TestEntropyThresholds:
-    """Test entropy threshold features"""
+    """Kiểm thử các đặc trưng theo ngưỡng entropy."""
     
     def test_high_entropy_ratio(self):
-        """Test calculation of high entropy block ratio"""
-        # Create data with mostly high entropy blocks
-        high_entropy_data = bytes(range(256)) * 16  # 4096 bytes, very high entropy
+        """Kiểm thử tỷ lệ block có entropy cao."""
+        # Tạo dữ liệu mà phần lớn block có entropy cao.
+        high_entropy_data = bytes(range(256)) * 16  # 4096 bytes, entropy rất cao.
         block_entropies, stats = calculate_block_entropy(high_entropy_data, block_size=256)
         
         assert stats['percentage_above_7_5'] > 0.9, "Most blocks should be above 7.5"

@@ -1,5 +1,5 @@
 """
-Shannon entropy calculation utilities
+Các hàm tính Shannon entropy.
 """
 
 from typing import List, Tuple
@@ -8,7 +8,7 @@ import numpy as np
 
 
 def calculate_entropy_from_counts(counts, data_len: int) -> float:
-    """Calculate Shannon entropy from precomputed byte counts."""
+    """Tính Shannon entropy từ số lần xuất hiện của từng byte."""
     if data_len == 0:
         return 0.0
 
@@ -20,13 +20,13 @@ def calculate_entropy_from_counts(counts, data_len: int) -> float:
 
 def calculate_entropy(data: bytes) -> float:
     """
-    Calculate Shannon entropy of data
-    
+    Tính Shannon entropy của dữ liệu.
+
     Args:
-        data: Bytes to analyze
-    
+        data: Dữ liệu byte cần phân tích.
+
     Returns:
-        Shannon entropy value (0-8 for bytes)
+        Giá trị entropy, nằm trong khoảng 0-8 với dữ liệu byte.
     """
     data_len = len(data)
     if data_len == 0:
@@ -39,14 +39,14 @@ def calculate_entropy(data: bytes) -> float:
 
 def calculate_block_entropy(data: bytes, block_size: int = 4096) -> Tuple[List[float], dict]:
     """
-    Calculate entropy for each block of data
-    
+    Tính entropy cho từng block dữ liệu.
+
     Args:
-        data: Bytes to analyze
-        block_size: Size of each block in bytes
-    
+        data: Dữ liệu byte cần phân tích.
+        block_size: Kích thước mỗi block, tính theo byte.
+
     Returns:
-        Tuple of (block_entropies, entropy_stats)
+        Bộ giá trị gồm danh sách entropy từng block và thống kê tổng hợp.
     """
     if block_size <= 0:
         raise ValueError("block_size must be greater than 0")
@@ -54,14 +54,14 @@ def calculate_block_entropy(data: bytes, block_size: int = 4096) -> Tuple[List[f
     block_entropies = []
     data_view = memoryview(data)
     
-    # Calculate entropy for each block
+    # Tính entropy cho từng block.
     for i in range(0, len(data), block_size):
         block = data_view[i:i + block_size]
         if len(block) > 0:
             entropy = calculate_entropy(block)
             block_entropies.append(entropy)
     
-    # Calculate statistics
+    # Tính thống kê entropy.
     if not block_entropies:
         stats = {
             'mean': 0.0,

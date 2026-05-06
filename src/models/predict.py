@@ -1,5 +1,5 @@
 """
-Model prediction utilities.
+Các hàm dự đoán và định dạng kết quả.
 """
 
 from typing import Any, Dict, List
@@ -174,12 +174,12 @@ ALGORITHM_GUESS_MAP = {
 
 
 def canonicalize_prediction_label(label: str) -> str:
-    """Return the current output name for a model label."""
+    """Chuẩn hóa nhãn dự đoán về tên đang dùng hiện tại."""
     return LEGACY_LABEL_ALIASES.get(str(label), str(label))
 
 
 def normalize_crypto_group(label: str, features: Dict[str, Any] = None) -> str:
-    """Map a detailed label to the broad crypto_group used as the main prediction."""
+    """Gom nhãn chi tiết về nhóm crypto_group chính."""
     label = canonicalize_prediction_label(label)
 
     if label in BROAD_CRYPTO_GROUPS:
@@ -196,18 +196,18 @@ def normalize_crypto_group(label: str, features: Dict[str, Any] = None) -> str:
 
 
 def normalize_crypto_subgroup(label: str, features: Dict[str, Any] = None) -> str:
-    """Return the most specific leaf label for the prediction."""
+    """Trả về nhãn con cụ thể nhất cho dự đoán."""
     return normalize_crypto_group(label, features)
 
 
 def algorithm_guess_for_label(label: str) -> str:
-    """Return a deliberately broad algorithm-family guess."""
+    """Trả về phỏng đoán rộng theo họ thuật toán."""
     label = canonicalize_prediction_label(label)
     return ALGORITHM_GUESS_MAP.get(label, normalize_crypto_group(label))
 
 
 def possible_encryption_types_for_label(label: str) -> List[str]:
-    """Return encryption algorithms/modes that can appear under a model label."""
+    """Liệt kê các thuật toán hoặc mode có thể nằm dưới một nhãn."""
     label = canonicalize_prediction_label(label)
 
     if label in {'not_encrypted', 'compressed_only'}:
@@ -224,7 +224,7 @@ def possible_encryption_types_for_label(label: str) -> List[str]:
 
 
 def possible_algorithm_names_for_label(label: str) -> List[str]:
-    """Return compact algorithm names that can appear under a model label."""
+    """Liệt kê tên thuật toán rút gọn có thể nằm dưới một nhãn."""
     label = canonicalize_prediction_label(label)
 
     if label in {'not_encrypted', 'compressed_only'}:
@@ -241,13 +241,13 @@ def possible_algorithm_names_for_label(label: str) -> List[str]:
 
 
 def display_crypto_group_for_label(label: str) -> str:
-    """Return the display group name used in compact prediction summaries."""
+    """Trả về tên nhóm dùng khi hiển thị tóm tắt kết quả."""
     group = normalize_crypto_group(label)
     return DISPLAY_CRYPTO_GROUP_NAMES.get(group, group)
 
 
 def possible_encryption_summary_for_label(label: str) -> str:
-    """Return a compact summary like block_cipher_like: AES/3DES/DES."""
+    """Tạo dòng tóm tắt như block_cipher_like: AES/3DES/DES."""
     group = display_crypto_group_for_label(label)
     algorithm_names = possible_algorithm_names_for_label(label)
 
@@ -258,7 +258,7 @@ def possible_encryption_summary_for_label(label: str) -> str:
 
 
 def summarize_prediction_features(features: Dict[str, Any]) -> Dict[str, Any]:
-    """Return the compact feature subset exposed in prediction responses."""
+    """Lấy tập đặc trưng rút gọn để đưa vào kết quả dự đoán."""
     return {
         key: features.get(key, 0)
         for key in PREDICTION_FEATURE_SUMMARY_KEYS
@@ -266,7 +266,7 @@ def summarize_prediction_features(features: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def is_encrypted_label(label: str) -> bool:
-    """Return whether a predicted label/group should be treated as encrypted."""
+    """Xác định nhãn hoặc nhóm dự đoán có được xem là mã hóa hay không."""
     return normalize_crypto_group(label) not in {'not_encrypted', 'compressed_only'}
 
 
@@ -274,7 +274,7 @@ def aggregate_top_groups(
     top_predictions: List[Dict[str, Any]],
     features: Dict[str, Any] = None,
 ) -> List[Dict[str, Any]]:
-    """Aggregate detailed label probabilities into crypto groups."""
+    """Cộng xác suất của các nhãn chi tiết theo nhóm mã hóa."""
     grouped: Dict[str, float] = {}
     for item in top_predictions:
         group = normalize_crypto_group(item.get('label', 'unknown_encrypted'), features)
@@ -287,7 +287,7 @@ def aggregate_top_groups(
 
 
 def infer_prediction_basis(features: Dict[str, Any]) -> List[str]:
-    """Infer which evidence sources support the prediction."""
+    """Suy ra nguồn bằng chứng đang hỗ trợ kết quả dự đoán."""
     basis = ['file_statistics']
     footer_score = float(features.get('footer_metadata_score', 0.0) or 0.0)
     footer_signals = [
@@ -305,7 +305,7 @@ def infer_prediction_basis(features: Dict[str, Any]) -> List[str]:
 
 
 def certainty_from_prediction(is_encrypted: bool, confidence: float, basis: List[str]) -> str:
-    """Convert model confidence and evidence sources into a calibrated label."""
+    """Đổi confidence và nguồn bằng chứng thành mức chắc chắn dễ đọc."""
     if not is_encrypted:
         return 'not_encrypted_or_compressed_candidate'
     if confidence >= 0.85 and 'footer_heuristics' in basis:
@@ -318,14 +318,14 @@ def certainty_from_prediction(is_encrypted: bool, confidence: float, basis: List
 
 
 class Predictor:
-    """Make predictions on new data with evidence generation."""
+    """Dự đoán dữ liệu mới và tạo phần bằng chứng đi kèm."""
 
     def __init__(self, model_trainer, feature_columns: list = None):
         self.model_trainer = model_trainer
         self.feature_columns = feature_columns or model_trainer.feature_columns
 
     def predict_with_confidence(self, X: np.ndarray, top_k: int = 3) -> Dict[str, Any]:
-        """Make predictions with confidence scores."""
+        """Dự đoán kèm confidence và các nhãn có xác suất cao."""
         predictions, probabilities = self.model_trainer.predict(X)
         class_names = [
             canonicalize_prediction_label(label)
@@ -380,7 +380,7 @@ class Predictor:
         prediction: str,
         confidence: float,
     ) -> List[str]:
-        """Generate human-readable evidence for a group-first prediction."""
+        """Tạo phần bằng chứng dễ đọc cho dự đoán theo nhóm."""
         evidence = []
         crypto_group = normalize_crypto_group(prediction)
 
@@ -467,7 +467,7 @@ def format_prediction_json(
     basis: List[str] = None,
     certainty: str = None,
 ) -> Dict[str, Any]:
-    """Format prediction output as a group-first JSON object."""
+    """Định dạng kết quả dự đoán theo cấu trúc ưu tiên nhóm mã hóa."""
     predicted_class = canonicalize_prediction_label(predicted_class)
     top_predictions = [
         {
@@ -524,11 +524,10 @@ def predict_all(
     ransomware_model_path: str = 'models/ransomware_family_predictor.pkl',
     top_k: int = 3,
 ) -> Dict[str, Any]:
-    """Run both crypto-family and optional ransomware-family predictions for a file.
+    """Chạy dự đoán nhóm mã hóa và họ ransomware cho một tệp.
 
-    Returns a dictionary with keys `crypto` (group-first formatted output) and
-    `ransomware_family` (simple prediction dict) when a ransomware model path is
-    provided.
+    Trả về dictionary có khóa `crypto` và `ransomware_family` nếu có đường dẫn
+    model họ ransomware.
     """
     from src.models.train import ModelTrainer
 
@@ -556,13 +555,13 @@ def predict_with_trainers(
     display_path: str = None,
     file_size: int = None,
 ) -> Dict[str, Any]:
-    """Run predictions with already-loaded trainer objects."""
+    """Chạy dự đoán với các trainer đã được nạp sẵn."""
     from src.features.extract_features import extract_features_from_file
 
-    # Extract features from file
+    # Trích xuất đặc trưng từ tệp.
     features = extract_features_from_file(file_path)
 
-    # Prepare crypto predictor
+    # Chuẩn bị bộ dự đoán nhóm mã hóa.
     crypto_predictor = Predictor(crypto_trainer)
 
     feature_array = pd.DataFrame([
@@ -601,7 +600,7 @@ def predict_with_trainers(
 
     ransomware_output = None
     if ransomware_trainer is not None:
-        # Run ransomware-family prediction
+        # Chạy dự đoán họ ransomware.
         ransomware_predictor = Predictor(ransomware_trainer)
 
         feature_array_r = pd.DataFrame([
@@ -635,7 +634,7 @@ def build_combined_prediction_output(
     ransomware_model_path: str,
     combined: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Build the merged prediction output used by CLI and web responses."""
+    """Tạo output gộp dùng chung cho CLI và web."""
     crypto = combined.get('crypto', {})
     ransomware = combined.get('ransomware_family')
     features_summary = crypto.get('features_summary', combined.get('features') or {})

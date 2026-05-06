@@ -1,3 +1,3 @@
-"""API module"""
+"""Module API."""
 
 __all__ = ['app']

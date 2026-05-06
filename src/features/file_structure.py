@@ -1,5 +1,5 @@
 """
-File structure and format analysis
+Phân tích cấu trúc và định dạng tệp.
 """
 
 from typing import Dict, Any
@@ -7,14 +7,14 @@ from typing import Dict, Any
 
 def analyze_file_structure(data: bytes, file_path: str = None) -> Dict[str, Any]:
     """
-    Analyze file structure characteristics
-    
+    Phân tích các đặc điểm cấu trúc của tệp.
+
     Args:
-        data: File data
-        file_path: Optional file path for extension analysis
-    
+        data: Dữ liệu tệp.
+        file_path: Đường dẫn tệp, dùng thêm để phân tích phần mở rộng.
+
     Returns:
-        Dictionary of structural features
+        Dictionary chứa các đặc trưng cấu trúc.
     """
     file_size = len(data)
     
@@ -27,13 +27,13 @@ def analyze_file_structure(data: bytes, file_path: str = None) -> Dict[str, Any]
         'is_power_of_two': (file_size & (file_size - 1)) == 0 and file_size > 0
     }
     
-    # File extension analysis
+    # Phân tích phần mở rộng của tệp.
     if file_path:
         import os
         _, ext = os.path.splitext(file_path)
         structure['file_extension'] = ext.lower()
     
-    # Check for common file signatures (magic bytes)
+    # Kiểm tra các chữ ký tệp phổ biến.
     magic_signatures = {
         'PDF': b'%PDF',
         'ZIP': b'PK\x03\x04',

@@ -34,6 +34,7 @@ dependencies = [
     "matplotlib>=3.4.0",
     "seaborn>=0.11.0",
     "joblib>=1.1.0",
+    "threadpoolctl>=3.1.0",
     "pyyaml>=5.4.0",
     "tqdm>=4.62.0",
     "cryptography>=3.4.0",

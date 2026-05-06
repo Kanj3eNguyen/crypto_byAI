@@ -1,5 +1,5 @@
 """
-3DES (Triple DES) encryption utilities
+Hàm tạo mẫu mã hóa 3DES.
 """
 
 from typing import Tuple, Dict, Any
@@ -12,19 +12,19 @@ from src.crypto.footer import append_metadata_footer
 
 def encrypt_3des_cbc(data: bytes, key_size: int = 192) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using 3DES-CBC
-    
+    Mã hóa dữ liệu bằng 3DES-CBC.
+
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (must be 192 for 3DES)
-    
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, 3DES dùng 192 bit.
+
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     if key_size != 192:
         raise ValueError("3DES requires 192-bit key")
     
-    key = DES3.adjust_key_parity(get_random_bytes(24))  # 192-bit key
+    key = DES3.adjust_key_parity(get_random_bytes(24))  # Khóa 192 bit.
     iv = get_random_bytes(DES3.block_size)
     
     cipher = DES3.new(key, DES3.MODE_CBC, iv)

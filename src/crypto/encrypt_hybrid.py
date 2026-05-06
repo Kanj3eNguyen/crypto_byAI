@@ -1,5 +1,5 @@
 """
-Hybrid encryption utilities (AES + RSA like ransomware)
+Hàm tạo mẫu mã hóa lai theo kiểu ransomware.
 """
 
 from functools import lru_cache
@@ -17,40 +17,41 @@ from src.crypto.footer import append_metadata_footer
 
 @lru_cache(maxsize=1)
 def _embedded_public_key():
-    """Return a cached RSA public key, like an embedded ransomware public key."""
+    """Trả về RSA public key được cache, mô phỏng khóa nhúng trong ransomware."""
     return RSA.generate(2048).publickey()
 
 
 def warm_hybrid_rsa_key() -> None:
-    """Warm the cached RSA public key before parallel sample generation."""
+    """Khởi động cache RSA trước khi sinh mẫu song song."""
     _embedded_public_key()
 
 
 def encrypt_hybrid_aes_rsa(data: bytes) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using hybrid encryption (AES + RSA)
-    Simulates ransomware pattern: AES encrypts file, RSA encrypts AES key
-    
+    Mã hóa dữ liệu bằng cơ chế lai AES + RSA.
+
+    AES mã hóa nội dung tệp, còn RSA mã hóa khóa AES.
+
     Args:
-        data: Data to encrypt
-    
+        data: Dữ liệu cần mã hóa.
+
     Returns:
-        Tuple of (hybrid_ciphertext, metadata)
+        Bộ giá trị gồm hybrid_ciphertext và metadata.
     """
     public_key = _embedded_public_key()
     
-    # Encrypt file with AES
-    aes_key = get_random_bytes(32)  # 256-bit AES key
+    # Mã hóa nội dung tệp bằng AES.
+    aes_key = get_random_bytes(32)  # Khóa AES 256 bit.
     iv = get_random_bytes(AES.block_size)
     
     cipher_aes = AES.new(aes_key, AES.MODE_CBC, iv)
     file_ciphertext = cipher_aes.encrypt(pad(data, AES.block_size))
     
-    # Encrypt AES key with RSA
+    # Mã hóa khóa AES bằng RSA.
     cipher_rsa = PKCS1_OAEP.new(public_key)
     encrypted_aes_key = cipher_rsa.encrypt(aes_key)
     
-    # Format: [AES_encrypted_file][IV:16][RSA_encrypted_key][footer_length:4]
+    # Cấu trúc: [file ma hoa AES][IV:16][khoa AES boc RSA][footer_length:4].
     footer_body = iv + encrypted_aes_key
     hybrid_ciphertext = append_metadata_footer(file_ciphertext, footer_body)
     
@@ -69,16 +70,15 @@ def encrypt_hybrid_aes_rsa(data: bytes) -> Tuple[bytes, Dict[str, Any]]:
 
 def encrypt_hybrid_chacha20_rsa(data: bytes) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using hybrid ChaCha20 + RSA.
+    Mã hóa dữ liệu bằng cơ chế lai ChaCha20 + RSA.
 
-    Simulates ransomware pattern: ChaCha20 encrypts file content, RSA encrypts
-    the per-file symmetric key.
+    ChaCha20 mã hóa nội dung tệp, còn RSA mã hóa khóa đối xứng của từng tệp.
 
     Args:
-        data: Data to encrypt
+        data: Dữ liệu cần mã hóa.
 
     Returns:
-        Tuple of (hybrid_ciphertext, metadata)
+        Bộ giá trị gồm hybrid_ciphertext và metadata.
     """
     public_key = _embedded_public_key()
 
@@ -108,16 +108,15 @@ def encrypt_hybrid_chacha20_rsa(data: bytes) -> Tuple[bytes, Dict[str, Any]]:
 
 def encrypt_hybrid_salsa20_rsa(data: bytes) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using hybrid Salsa20 + RSA.
+    Mã hóa dữ liệu bằng cơ chế lai Salsa20 + RSA.
 
-    Simulates ransomware pattern: Salsa20 encrypts file content, RSA encrypts
-    the per-file symmetric key.
+    Salsa20 mã hóa nội dung tệp, còn RSA mã hóa khóa đối xứng của từng tệp.
 
     Args:
-        data: Data to encrypt
+        data: Dữ liệu cần mã hóa.
 
     Returns:
-        Tuple of (hybrid_ciphertext, metadata)
+        Bộ giá trị gồm hybrid_ciphertext và metadata.
     """
     public_key = _embedded_public_key()
 

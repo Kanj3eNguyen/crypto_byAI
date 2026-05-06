@@ -1,5 +1,5 @@
 """
-AES encryption utilities
+Hàm tạo mẫu mã hóa AES.
 """
 
 from typing import Tuple, Dict, Any
@@ -12,14 +12,14 @@ from src.crypto.footer import append_metadata_footer
 
 def encrypt_aes_cbc(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-CBC
-    
+    Mã hóa dữ liệu bằng AES-CBC.
+
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
-    
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
+
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
     iv = get_random_bytes(AES.block_size)
@@ -40,17 +40,17 @@ def encrypt_aes_cbc(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
 
 def encrypt_aes_ecb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-ECB.
+    Mã hóa dữ liệu bằng AES-ECB.
 
-    ECB is included only as a weak-pattern synthetic class because some malware
-    samples use simple or incorrectly configured block-cipher modes.
+    ECB được giữ lại để tạo mẫu mô phỏng các cấu hình block cipher yếu hoặc
+    cấu hình sai.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
 
@@ -69,14 +69,14 @@ def encrypt_aes_ecb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
 
 def encrypt_aes_ctr(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-CTR
-    
+    Mã hóa dữ liệu bằng AES-CTR.
+
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
-    
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
+
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
     nonce = get_random_bytes(8)
@@ -97,14 +97,14 @@ def encrypt_aes_ctr(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
 
 def encrypt_aes_cfb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-CFB.
+    Mã hóa dữ liệu bằng AES-CFB.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
     iv = get_random_bytes(AES.block_size)
@@ -125,14 +125,14 @@ def encrypt_aes_cfb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
 
 def encrypt_aes_ofb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-OFB.
+    Mã hóa dữ liệu bằng AES-OFB.
 
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
 
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
     iv = get_random_bytes(AES.block_size)
@@ -153,14 +153,14 @@ def encrypt_aes_ofb(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, 
 
 def encrypt_aes_gcm(data: bytes, key_size: int = 256) -> Tuple[bytes, Dict[str, Any]]:
     """
-    Encrypt data using AES-GCM
-    
+    Mã hóa dữ liệu bằng AES-GCM.
+
     Args:
-        data: Data to encrypt
-        key_size: Key size in bits (128, 192, or 256)
-    
+        data: Dữ liệu cần mã hóa.
+        key_size: Độ dài khóa tính theo bit, gồm 128, 192 hoặc 256.
+
     Returns:
-        Tuple of (ciphertext, metadata)
+        Bộ giá trị gồm ciphertext và metadata.
     """
     key = get_random_bytes(key_size // 8)
     nonce = get_random_bytes(12)
