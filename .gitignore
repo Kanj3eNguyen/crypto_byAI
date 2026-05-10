@@ -129,13 +129,11 @@ data/raw/**
 !data/raw/.gitkeep
 data/generated/**
 !data/generated/.gitkeep
-data/features/**
-!data/features/.gitkeep
+
 data/ransomware_family/**
 !data/ransomware_family/.gitkeep
 
-!models/.gitkeep
-reports/**
+
 !reports/.gitkeep
 
 # IDE

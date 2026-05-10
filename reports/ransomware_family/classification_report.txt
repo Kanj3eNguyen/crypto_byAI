@@ -1,0 +1,65 @@
+MODEL EVALUATION REPORT
+==================================================
+
+Accuracy: 0.9993
+Precision (Macro): 0.9993
+Recall (Macro): 0.9993
+F1 Score (Macro): 0.9993
+F1 Score (Weighted): 0.9993
+
+PER-CLASS METRICS
+--------------------------------------------------
+
+BLACKCAT:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+CERBER:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+CONTI:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+LOCKBIT:
+  Precision: 1.0000
+  Recall: 0.9934
+  F1-Score: 0.9967
+  Support: 151
+
+NOTPETYA:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+PHOBOS:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+RYUK:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151
+
+SODINOKIBI:
+  Precision: 0.9934
+  Recall: 1.0000
+  F1-Score: 0.9967
+  Support: 151
+
+WANNACRY:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 151

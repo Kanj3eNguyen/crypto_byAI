@@ -1,0 +1,56 @@
+MODEL EVALUATION REPORT
+==================================================
+
+Accuracy: 0.9847
+Precision (Macro): 0.9847
+Recall (Macro): 0.9847
+F1 Score (Macro): 0.9846
+F1 Score (Weighted): 0.9846
+
+CLASS DEFINITIONS
+--------------------------------------------------
+block_padded_mode_like: AES_like, 3DES_like, Blowfish_like, DES_like, RC2_like, CAST5_like
+compressed_only: compressed_only
+hybrid_encryption_like: hybrid_AES_RSA_like, hybrid_ChaCha20_RSA_like, hybrid_Salsa20_RSA_like
+not_encrypted: not_encrypted
+stream_or_counter_mode_like: ChaCha20_Salsa20_like, RC4_like
+weak_obfuscation_like: XOR_like
+
+PER-CLASS METRICS
+--------------------------------------------------
+
+block_padded_mode_like:
+  Precision: 0.9634
+  Recall: 0.9437
+  F1-Score: 0.9535
+  Support: 391
+
+compressed_only:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 391
+
+hybrid_encryption_like:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 391
+
+not_encrypted:
+  Precision: 1.0000
+  Recall: 1.0000
+  F1-Score: 1.0000
+  Support: 391
+
+stream_or_counter_mode_like:
+  Precision: 0.9496
+  Recall: 0.9642
+  F1-Score: 0.9569
+  Support: 391
+
+weak_obfuscation_like:
+  Precision: 0.9949
+  Recall: 1.0000
+  F1-Score: 0.9974
+  Support: 391
